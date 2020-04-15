@@ -18,9 +18,20 @@ This is currently a project to create a video game written in Python and powered
 * A fail state
 
 ### Broken things
-* Lerp, asteroids do not move right now
-* Test distance, astroids are not moved if too far away
-* Missle light has too much range
+* Missle light could be improved
+* There is now a memory leak :)
+
+### Things Fixed this Commit
+* Cleaned code more
+* Added fullscreen toggle (f11)
+* Added fps toggle (f12)
+* Fps now stays in corner when toggling full screen
+* Fixed fog, and incresed fog distance
+* Fixed astoeroid animations, they now actually work
+* Fixed Inifnite space flight with the procedutally generated asteroids
+* Fixed precedurally generated asteroid seed, so that all asteroids will be unique
+* Combined the 3d space rocks and "generate asteroid..." files
+* Asteroids now spawn in 3 different sizes, with varying speed
 
 ### Requirements
 #### A compiled version is not yet available, running the .py is required
