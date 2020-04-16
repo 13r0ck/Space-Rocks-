@@ -21,17 +21,18 @@ asteroid_future_distance    = 2000000 # How far the asteroid will travel
 asteroid_total              = []
 missle_total                = []
 asteroid_max                = 1000 # The maximum number of asteroids ***** MUST BE AN EVEN NUMBER  and make sur eto modify loop_test_number global variable*****
-spaceship_speed_const       = 50
+spaceship_speed_const       = 200
 spaceship_speed_x           = 0
 spaceship_speed_y           = 0
 spaceship_speed_z           = 0
 colors                      = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4)}
 loop_test                   = 0 # Used to limit the number of asteroids that have their distance tested each frame
-loop_test_number            = 40 # The number of asteroids to test their distance each frame ***** ASTEROID_MAX MUST BE EVENLY DIVISIBLE BY THIS NUMBER - WILL FIX THIS LATER *****
+loop_test_number            = 1000 # The number of asteroids to test their distance each frame ***** ASTEROID_MAX MUST BE EVENLY DIVISIBLE BY THIS NUMBER - WILL FIX THIS LATER *****
 last_frame_mpos_x           = 0
 last_frame_mpos_y           = 0
 asteroid_test_distance      = 999000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
 score                       = 0  # Initialize score
+score_list                  = [0,1,2,3]
 FullSceeen                  = False
 Frames                      = True
 
@@ -126,6 +127,7 @@ class Begin(ShowBase):
                 spaceship_speed_y = 1.1
             else:
                 spaceship_speed_y = 800 * math.log(spaceship_speed_y)
+            #spaceship_speed_y = (10000 / 1 + math.exp(-0.000000001 * (spaceship_speed_y - 500000000))) - 1
         if Begin.keyMap["backward"]:
             if spaceship_speed_y > 0:
                 spaceship_speed_y -= 40 * math.log(spaceship_speed_y)
@@ -175,10 +177,15 @@ class Begin(ShowBase):
     ##### // Tasks \\ #####
     def score(self):
         global score
-        self.title = OnscreenText(text="Score: {0}".format(score),
-                            parent=base.a2dTopLeft, scale=.07,
-                            align=TextNode.ALeft, pos=(0.1,-0.1),
-                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+        global score_list
+        if (len(score_list) > 0):
+            for points in score_list:
+                score += points
+            score_list = []
+            self.title = OnscreenText(text="Score: {0}".format(score),
+                                parent=base.a2dTopLeft, scale=.07,
+                                align=TextNode.ALeft, pos=(0.1,-0.1),
+                                fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
         return Task.cont
 
     # Test the distance of all asteroids. If the asteroid is too far away turn it around.
@@ -244,26 +251,6 @@ class Begin(ShowBase):
         spaceship_speed_x = 0
         spaceship_speed_y = 0
         spaceship_speed_z = 0
-
-    #Remove all missiles from the scene.
-    def nuke_missles(self):
-        global missle_total
-        print(missle_total)
-        allmissles = render.findAllMatches("sphere.egg")
-        print("Nuked " + str(len(allmissles)) + " Missles")
-        for missle in missle_total:
-            render.clearLight(missle.plnp)
-        for objct in allmissles:
-            objct.detachNode()
-            del objct
-
-    #Remove all asteroids
-    def nuke(self):
-        allMonkeys = render.findAllMatches(self.asteroid.modelName[:3] + "*" + ".egg")
-        print("Nuked " + str(len(allMonkeys)) + " asteroids")
-        for objct in allMonkeys:
-            objct.detachNode()
-            del objct
 
     ##### // Mist Functions \\ #####
     def setKey(self, key, value):
