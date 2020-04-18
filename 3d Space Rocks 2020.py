@@ -32,9 +32,10 @@ last_frame_mpos_x           = 0
 last_frame_mpos_y           = 0
 asteroid_test_distance      = 999000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
 score                       = 0  # Initialize score
-score_list                  = [0,1,2,3]
+score_list                  = [0]
 FullSceeen                  = False
 Frames                      = True
+test_max_min                = [0,0,0,0]
 
 class Begin(ShowBase):
     def __init__(self):
@@ -91,6 +92,8 @@ class Begin(ShowBase):
         self.accept('f12', self.framesToggle)
         # Development keys
         self.accept('0', self.stop_moving) # Stop moving
+        self.accept('1', self.zerohpr)
+        self.accept('2', self.printhpr)
 
         # Create the geometry
         self.startTasks()
@@ -215,6 +218,7 @@ class Begin(ShowBase):
         # Check to make sure the mouse is readable
         global last_frame_mpos_x
         global last_frame_mpos_y
+        global test_max_min
         if base.mouseWatcherNode.hasMouse():
             mpos = base.mouseWatcherNode.getMouse()
             mpos_x = mpos[0]
@@ -223,6 +227,8 @@ class Begin(ShowBase):
                 mpos_x = 0
             if (mpos[1] == last_frame_mpos_y):
                 mpos_y = 0
+            p = base.camera.getP()
+            h = base.camera.getH()
             base.camera.setP(base.camera, mpos_y * 52) #mpos[1] = y value
             base.camera.setH(base.camera, mpos_x * -50) #[0] = x value
             last_frame_mpos_x = mpos[0]
@@ -287,6 +293,12 @@ class Begin(ShowBase):
         else:
             base.setFrameRateMeter(True)
             Frames = True
+
+    def zerohpr(self):
+        base.camera.setHpr(0,0,0)
+
+    def printhpr(self):
+        print(base.camera.getHpr())
 
 class Asteroid(object):
 
@@ -432,12 +444,11 @@ class Asteroid(object):
 
 class Location(object): # Create child of asteroid to find the future position the asteroid will fly to
     def __init__(self, asteroid_parent, distance=asteroid_future_distance):
-        self.obj = loader.loadModel("./Models/empty.egg")
+        self.obj = loader.loadModel("./Models/sphere.egg")
         self.obj.setY(asteroid_parent, distance)
 
 class Missle(object):
     def __init__(self):
-        print("missle created")
         camera_hpr = base.camera.getHpr()
         self.core = loader.loadModel("./Models/sphere.egg")
         self.core.setPos(base.camera, (0,0,0))
