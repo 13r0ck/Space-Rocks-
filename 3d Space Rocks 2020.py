@@ -1,146 +1,74 @@
 from direct.showbase.ShowBase import ShowBase
+from panda3d.core import Geom, GeomNode, GeomVertexFormat, \
+    GeomVertexData, GeomTriangles, GeomVertexWriter, GeomVertexReader
+from panda3d.core import NodePath
+from panda3d.core import PointLight
 from panda3d.core import *
-from direct.interval.IntervalGlobal import * 
-from direct.gui.OnscreenText import OnscreenText
-from direct.gui.DirectGui import *
-from direct.showbase.DirectObject import DirectObject
-from direct.actor.Actor import Actor
-from direct.task import Task 
-from direct.task.Task import Task
-from pprint import pprint
-import math
+from panda3d.core import VBase4, Vec3
+from direct.task import Task
 import sys
 import random
+import math
+import collections
+from opensimplex import OpenSimplex as opens
+import time
+from direct.gui.OnscreenText import OnscreenText
+from direct.interval.IntervalGlobal import *
 
-
-print("Starting 3d Asteroid Simulator 2020")
-asteroid_spawn_distance = 990000 # How close the asteroids spawn and how far away they will fly to
+asteroid_spawn_distance     = 990000 # How close the asteroids spawn and how far away they will fly to
 asteroid_min_spawn_distance = 5000
-asteroid_speed = 90 # Time it takes an asteroid to fly from one side to another in seconds
-asteroid_speed_percent = 30 # the pecentage that asteroid_speed can be modified by randomly for each asteroid. 
-asteroid_future_distance = 2000000 # How far the asteroid will travel
-asteroid_total = []
-missle_total = []
-asteroid_max = 600 # The maximum number of asteroids ***** MUST BE AN EVEN NUMBER  and make sur eto modify loop_test_number global variable*****
-spaceship_speed_const = 10
-spaceship_speed_x = 0
-spaceship_speed_y = 0
-spaceship_speed_z = 0
-colors = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4)}
-loop_test = 0 # Used to limit the number of asteroids that have their distance tested each frame
-loop_test_number = 60 # The number of asteroids to test their distance each frame ***** ASTEROID_MAX MUST BE EVENLY DIVISIBLE BY THIS NUMBER - WILL FIX THIS LATER *****
-last_frame_mpos_x = 0
-last_frame_mpos_y = 0
-asteroid_test_distance = 990000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
-score = 0  # Initialize score
+asteroid_future_distance    = 2000000 # How far the asteroid will travel
+asteroid_total              = []
+missle_total                = []
+asteroid_max                = 1000 # The maximum number of asteroids ***** MUST BE AN EVEN NUMBER  and make sur eto modify loop_test_number global variable*****
+spaceship_speed_const       = 200
+spaceship_speed_x           = 0
+spaceship_speed_y           = 0
+spaceship_speed_z           = 0
+colors                      = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4)}
+loop_test                   = 0 # Used to limit the number of asteroids that have their distance tested each frame
+loop_test_number            = 1000 # The number of asteroids to test their distance each frame ***** ASTEROID_MAX MUST BE EVENLY DIVISIBLE BY THIS NUMBER - WILL FIX THIS LATER *****
+last_frame_mpos_x           = 0
+last_frame_mpos_y           = 0
+asteroid_test_distance      = 999000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
+score                       = 0  # Initialize score
+score_list                  = [0]
+FullSceeen                  = False
+Frames                      = True
+test_max_min                = [0,0,0,0]
 
-
-class Asteroid(object):
+class Begin(ShowBase):
     def __init__(self):
-        self.modelName = "asteroid" + str(random.randrange(1,25,1)) # Name must be at least 3 charachters long
-        self.obj = loader.loadModel("./Models/" + self.modelName + ".egg")
-        """I NEED TO RE-EXPORT THE ASTEROID MODELS > THEY ARE NOT BEING AFFECTED BY COLORS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"""
-        self.obj.setColor(colors.get("gray")) #(gray, gray, gray, 1)
-        self.obj.setScale((random.randrange(900, 9000, 1) ,random.randrange(900, 9000, 1) ,random.randrange(900, 9000, 1)))
-        while True:
-            spawn_distance = asteroid_spawn_distance * (random.random() ** 0.5) # **0.5 to evenly distribute by the inverse squared law
-            if spawn_distance < asteroid_min_spawn_distance:
-                break
-        self.asteroid_path(self.get_sphere_points(asteroid_spawn_distance / (random.random() ** 0.5))) # Start the asteroid from any random position in the 
-        asteroid_total.insert(0,self)
-        self.obj.reparentTo(render)
-
-    def asteroid_path(self, start_point): #takes starting location (start_point must be a LPoint3)
-        # Create and run the asteroid animation
-            self.asteroid_lerp = LerpPosInterval(self.obj, # Object being manipulated. The asteroid in this case.
-                                                asteroid_speed * random.randrange(-asteroid_speed_percent, asteroid_speed_percent, 1), # How fast the asteroid will move in seconds
-                                                self.get_sphere_points(asteroid_future_distance, base.camera), # future location at end of lerp
-                                                start_point) # The start position of the asteroid
-            self.asteroid_lerp.start()
-
-    def get_sphere_points(self, radius, relative_to=False): #returns a LPoint3 in sphere. relative_to will return global LPoint3 realtive to given object.
-            phi = random.uniform(0,2*math.pi)
-            theta = random.uniform(0,2*math.pi)
-            if relative_to:
-                rel_xyz = relative_to.getPos()
-                x = radius * math.cos(phi) * math.sin(theta) + rel_xyz[0]
-                y = radius * math.sin(phi) * math.sin(theta) + rel_xyz[1]
-                z = radius * math.cos(theta) + rel_xyz[2]
-            else:
-                x = radius * math.cos(phi) * math.sin(theta)
-                y = radius * math.sin(phi) * math.sin(theta)
-                z = radius * math.cos(theta)
-            return LPoint3(x,y,z)
-
-    def handle_missle_colision(self, entry):
-        global score
-        score += 1
-        print(entry)
-
-
-class Missle(object):
-    def __init__(self):
-        camera_hpr = base.camera.getHpr()
-        self.core = loader.loadModel("./Models/sphere.egg")
-        self.core.setPos(base.camera, (0,0,0))
-        self.core.setHpr(camera_hpr)
-        self.ttl = 0.5 # Time to live in seconds
-        self.core.setScale(600,600,600)
-        self.glow = loader.loadModel("./Models/sphere.egg")
-        self.core.setTransparency(TransparencyAttrib.MAlpha)
-        self.glow.setScale(2,2,2)
-        self.glow.reparentTo(self.core)
-        self.core.setColor(colors.get("white"))
-        self.glow.setColor(colors.get("white-transparent"))
-        self.glow.setPos(0,0,0) #relative to parent
-        self.core.setLightOff() # remove all other lights from missle so it is a bright white
-        missle_total.append(self)
-
-        #Create the light so the missle glows
-        plight = PointLight('plight')
-        plight.setColor(colors.get("white"))
-        plight.setAttenuation(LVector3(0, 0.000005 , 0))
-        self.plnp = self.core.attachNewNode(plight) #point light node point
-        render.setLight(self.plnp)
-        """for asteroid in asteroid_total:
-            asteroid.obj.setLight(plnp)""" #Might have to create a node point and attach that in the setup. Then add lights to that node point. I am going to bed now.
-
-        # Create and run the missle animation
-        location = Location(self.core).obj.getPos()
-        self.asteroid_lerp = LerpPosInterval(self.core, # Object being manipulated. The missle in this case.
-                                            1000, # How long it will take the missle to go from point a to b in seconds
-                                            location, # future location at end of lerp
-                                            base.camera.getPos()) # The start position of the missle
-        self.asteroid_lerp.start()
-        del location
-
-        self.core.reparentTo(render)
-
-class Location(object): # Create child of asteroid to find the future position the asteroid will fly to
-    def __init__(self, asteroid_parent, distance=asteroid_future_distance):
-        self.obj = loader.loadModel("./Models/empty.egg")
-        self.obj.setY(asteroid_parent, distance)
-        
-
-
-class begin(ShowBase):
-    def __init__(self):
+        # Basics
         ShowBase.__init__(self)
-        base.disableMouse()  # Disable mouse-based camera-control
-        base.setFrameRateMeter(True) # Show the frame rate
-
-        # Create an instance of fog called 'distanceFog'.
+        #Setup the window
+        base.disableMouse()
+        if Frames:
+            base.setFrameRateMeter(True)
+        base.camLens.setFar(asteroid_spawn_distance * 100)
+        render.setAntialias(AntialiasAttrib.MAuto)
+        wp = WindowProperties()
+        wp.setSize(800,600)
+        wp.setCursorHidden(True)
+        self.win.requestProperties(wp)
+        self.setBackgroundColor(colors.get("black"))
+        # Lights
+        ambientLight = AmbientLight("ambientLight")
+        ambientLight.setColor((0.5, 0.5, 0.5, 1))
+        directionalLight = DirectionalLight("directionalLight")
+        directionalLight.setDirection(LVector3(0, 45, -45))
+        directionalLight.setColor((1, 1, 1, 1))
+        directionalLight.setShadowCaster(True)
+        render.setLight(render.attachNewNode(directionalLight))
+        render.setLight(render.attachNewNode(ambientLight))
+        #fog
         self.fog = Fog('distanceFog')
         self.fog.setColor(0, 0, 0)
-        self.fog.setExpDensity(.000004)
-        # the fog.
+        self.fog.setExpDensity(.000003)
         render.setFog(self.fog)
 
-        #base.oobe()
-        #base.enableParticles() # Enables the pyhsics engine. Called particels because panda3d is werid
-        begin.keyMap = {
+        Begin.keyMap = {
             "forward": False, "strafe-left": False, "backward": False, "strafe-right": False, "strafe-up": False, "strafe-down": False, "roll-left": False, "roll-right": False} #True if coresponding key is currently held down.
-        
         #Basic camera movement on the xyz coordinate plane
         self.accept("escape", sys.exit)
         self.accept("w", self.setKey, ["forward", True]) # Pressing the key down sets the state to true. Tasks will function as if pressing key each frame.
@@ -159,93 +87,111 @@ class begin(ShowBase):
         self.accept("q-up", self.setKey, ["roll-left", False])
         self.accept("e", self.setKey, ["roll-right", True])
         self.accept("e-up", self.setKey, ["roll-right", False])
-
-        self.accept('k', self.createAsteroids) # K for Kreate - Creates asteroids
-        self.accept('n', self.nuke) # N for Nuke - Removes all asteroids
-        self.accept('p', self.nuke_missles) #P for pop missles
-        self.accept('mouse1', self.imma_fireing_ma_lazar) # Shoots the projectile
+        self.accept('mouse1', self.shoot) # Shoots the projectile
+        self.accept('f11', self.fullscreenToggle)
+        self.accept('f12', self.framesToggle)
+        # Development keys
         self.accept('0', self.stop_moving) # Stop moving
-        self.accept('t', self.test_key) #calls a funtion for testing purposes
-        #base.camLens.setFov(20)
-        base.camLens.setFar(asteroid_spawn_distance)
-        render.setAntialias(AntialiasAttrib.MAuto) # Enable anti-aliasing
+        self.accept('1', self.zerohpr)
+        self.accept('2', self.printhpr)
 
-        #Hide the Mouse
-        props = WindowProperties()
-        props.setCursorHidden(True)
-        self.win.requestProperties(props)
-
-        #Set the background color to black
-        self.setBackgroundColor(colors.get("black"))
-        self.setupLights()
-
-        #Create the world
+        # Create the geometry
+        self.startTasks()
         self.createAsteroids()
 
-    ##### // Game Play Functions \\ #####
-    def imma_fireing_ma_lazar(self):
-        missle = Missle()
+    def createAsteroids(self):
+        for i in range(0,asteroid_max):
+            print(int((i / asteroid_max)*100) , "% done")
+            asteroid_total.append(Asteroid(random.choice(["small","medium","large"])))
 
-    def stop_moving(self):
+    def startTasks(self):
+        #The tasks below are the functions run every frame so the game will work
+        taskMgr.add(Begin.test_distance, "Test Distance")
+        taskMgr.add(Begin.mouseTask, "Camera Look at Mouse")
+        taskMgr.add(Begin.spaceship_movement, "Move the Player or 'spaceship' ")
+        taskMgr.add(Begin.remove_old_missles, "Remove old missles")
+        taskMgr.add(Begin.score, "Score")
+
+    ##### // Key Press Functions \\ #####
+    def spaceship_movement(self):
+        global spaceship_speed_const
         global spaceship_speed_x
         global spaceship_speed_y
         global spaceship_speed_z
-        spaceship_speed_x = 0
-        spaceship_speed_y = 0
-        spaceship_speed_z = 0
+        #dt = globalClock.getDt() # The change in time since the last frame
 
+        base.camera.setPos(base.camera, spaceship_speed_x, # Spaceship X change per frame
+                                        spaceship_speed_y, # Spaceship Y change per frame
+                                        spaceship_speed_z) #   "       Z   "     "    "
+        if Begin.keyMap["forward"]:
+            if spaceship_speed_y < 0:
+                spaceship_speed_y += 40 * math.log(-spaceship_speed_y)
+            elif spaceship_speed_y < 1:
+                spaceship_speed_y = 1.1
+            else:
+                spaceship_speed_y = 800 * math.log(spaceship_speed_y)
+            #spaceship_speed_y = (10000 / 1 + math.exp(-0.000000001 * (spaceship_speed_y - 500000000))) - 1
+        if Begin.keyMap["backward"]:
+            if spaceship_speed_y > 0:
+                spaceship_speed_y -= 40 * math.log(spaceship_speed_y)
+            elif spaceship_speed_y == 0:
+                spaceship_speed_y = -1.1
+            else:
+                spaceship_speed_y = -(100 * math.log(-spaceship_speed_y))
+        if Begin.keyMap["strafe-left"]:
+            if spaceship_speed_x > 0:
+                spaceship_speed_x -= 40 * math.log(spaceship_speed_x)
+            elif spaceship_speed_x == 0:
+                spaceship_speed_x = -1.1
+            else:
+                spaceship_speed_x = -(100 * math.log(-spaceship_speed_x))
+        if Begin.keyMap["strafe-right"]:
+            if spaceship_speed_x < 0:
+                spaceship_speed_x += 40 * math.log(-spaceship_speed_x)
+            elif spaceship_speed_x < 1:
+                spaceship_speed_x = 1.1
+            else:
+                spaceship_speed_x = 100 * math.log(spaceship_speed_x)
+        if Begin.keyMap["strafe-up"]:
+            if spaceship_speed_z < 0:
+                spaceship_speed_z += 40 * math.log(-spaceship_speed_z)
+            elif spaceship_speed_z < 1:
+                spaceship_speed_z = 1.1
+            else:
+                spaceship_speed_z = 100 * math.log(spaceship_speed_z)
+        if Begin.keyMap["strafe-down"]:
+            if spaceship_speed_z > 0:
+                spaceship_speed_z -= 40 * math.log(spaceship_speed_z)
+            elif spaceship_speed_z == 0:
+                spaceship_speed_z = -1.1
+            else:
+                spaceship_speed_z = -(100 * math.log(-spaceship_speed_z))
+        if Begin.keyMap["roll-left"]:
+            camera_r = base.camera.getR()
+            base.camera.setR(camera_r - 1)
+        if Begin.keyMap["roll-right"]:
+            camera_r = base.camera.getR()
+            base.camera.setR((camera_r + 1))
+        return Task.cont
 
-    ##### // Initial setup functions are below this line \\ #####
-    print("Creating Asteroids")
-    def createAsteroids(self, number=asteroid_max): # Can be used to create as many asteroids as wanted. Defalut is 500 for testing purposes.
-        for i in range(number):
-            self.asteroid = Asteroid()
-        
-        #The tasks below are the functions run every frame so the game will work
-        taskMgr.add(begin.test_distance, "Test Distance")
-        taskMgr.add(begin.mouseTask, "Camera Look at Mouse")
-        taskMgr.add(begin.spaceship_movement, "Move the Player or 'spaceship' ")
-        taskMgr.add(begin.remove_old_missles, "Remove old missles")
-        taskMgr.add(begin.score, "Score")
+    def shoot(self):
+        missle = Missle()
 
-    #Remove all missiles from the scene.
-    def nuke_missles(self):
-        global missle_total
-        print(missle_total)
-        allmissles = render.findAllMatches("sphere.egg")
-        print("Nuked " + str(len(allmissles)) + " Missles")
-        for missle in missle_total:
-            render.clearLight(missle.plnp)
-        for objct in allmissles:
-            objct.detachNode()
-            del objct
+    ##### // Tasks \\ #####
+    def score(self):
+        global score
+        global score_list
+        if (len(score_list) > 0):
+            for points in score_list:
+                score += points
+            score_list = []
+            self.title = OnscreenText(text="Score: {0}".format(score),
+                                parent=base.a2dTopLeft, scale=.07,
+                                align=TextNode.ALeft, pos=(0.1,-0.1),
+                                fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+        return Task.cont
 
-
-    #Remove all asteroids
-    def nuke(self):
-        allMonkeys = render.findAllMatches(self.asteroid.modelName[:3] + "*" + ".egg")
-        print("Nuked " + str(len(allMonkeys)) + " asteroids")
-        for objct in allMonkeys:
-            objct.detachNode()
-            del objct
-
-    def test_key(self):
-        pprint("You found the test key!")
-
-    def setupLights(self):  # This function sets up some default lighting
-        ambientLight = AmbientLight("ambientLight")
-        ambientLight.setColor((.02, 0.02, 0.02, 1))
-        directionalLight = DirectionalLight("directionalLight")
-        directionalLight.setDirection(LVector3(0, 45, -45))
-        #directionalLight.setColor((0.5, 0.5, 0.5, 1))
-        render.setLight(render.attachNewNode(directionalLight))
-        render.setLight(render.attachNewNode(ambientLight))
-
-    def setKey(self, key, value):
-        self.keyMap[key] = value
-
-##### // All Tasks are below this line \\ #####
-# Test the distance of all asteroids. If the asteroid is too far away turn it around.
+    # Test the distance of all asteroids. If the asteroid is too far away turn it around.
     def test_distance(self): 
         global loop_test
         global loop_test_number
@@ -253,12 +199,11 @@ class begin(ShowBase):
         global asteroid_test_distance
         for index in range(loop_test, loop_test + loop_test_number):
             asteroid = asteroid_total[index]
-            asteroid_xyz = asteroid.obj.getPos()
+            asteroid_xyz = asteroid.np.getPos()
             camera_xyz = base.camera.getPos()
             distance = math.sqrt((asteroid_xyz[0] - camera_xyz[0])**2 + (asteroid_xyz[1] - camera_xyz[1])**2 + (asteroid_xyz[2] - camera_xyz[2])**2) # Distance formula
-            if distance > asteroid_test_distance: # Need to figure out exactly what is a good distance for after the ">"
+            if distance > asteroid_test_distance: 
                 future_pos = asteroid.get_sphere_points(asteroid_spawn_distance, base.camera)
-                #print("Asteroid #", asteroid.obj.name , " is too faw away at " , distance , "Moving to " , future_pos)
                 asteroid.asteroid_lerp.finish()
                 asteroid.asteroid_path(future_pos) #move to sphere relative to camera
 
@@ -273,6 +218,7 @@ class begin(ShowBase):
         # Check to make sure the mouse is readable
         global last_frame_mpos_x
         global last_frame_mpos_y
+        global test_max_min
         if base.mouseWatcherNode.hasMouse():
             mpos = base.mouseWatcherNode.getMouse()
             mpos_x = mpos[0]
@@ -281,6 +227,8 @@ class begin(ShowBase):
                 mpos_x = 0
             if (mpos[1] == last_frame_mpos_y):
                 mpos_y = 0
+            p = base.camera.getP()
+            h = base.camera.getH()
             base.camera.setP(base.camera, mpos_y * 52) #mpos[1] = y value
             base.camera.setH(base.camera, mpos_x * -50) #[0] = x value
             last_frame_mpos_x = mpos[0]
@@ -296,108 +244,247 @@ class begin(ShowBase):
         for missle in missle_total:
             if missle.ttl <= 0:
                 render.clearLight(missle.plnp)
+                missle.core.detachNode()
             else:
                 missle.ttl -= dt
         return Task.cont
 
-
-    def spaceship_movement(self):
-        global spaceship_speed_const
+    ##### // Developement Functions \\ #####
+    def stop_moving(self):
         global spaceship_speed_x
         global spaceship_speed_y
         global spaceship_speed_z
-        #dt = globalClock.getDt() # The change in time since the last frame
+        spaceship_speed_x = 0
+        spaceship_speed_y = 0
+        spaceship_speed_z = 0
 
-        base.camera.setPos(base.camera, spaceship_speed_x, # Spaceship X change per frame
-                                        spaceship_speed_y, # Spaceship Y change per frame
-                                        spaceship_speed_z) #   "       Z   "     "    "
-        if begin.keyMap["forward"]:
-            if spaceship_speed_y < 0:
-                spaceship_speed_y += 40 * math.log(-spaceship_speed_y)
-            elif spaceship_speed_y < 1:
-                spaceship_speed_y = 1.1
-            else:
-                spaceship_speed_y = 1000 * math.log(spaceship_speed_y)
-        if begin.keyMap["backward"]:
-            if spaceship_speed_y > 0:
-                spaceship_speed_y -= 40 * math.log(spaceship_speed_y)
-            elif spaceship_speed_y == 0:
-                spaceship_speed_y = -1.1
-            else:
-                spaceship_speed_y = -(100 * math.log(-spaceship_speed_y))
-        if begin.keyMap["strafe-left"]:
-            if spaceship_speed_x > 0:
-                spaceship_speed_x -= 40 * math.log(spaceship_speed_x)
-            elif spaceship_speed_x == 0:
-                spaceship_speed_x = -1.1
-            else:
-                spaceship_speed_x = -(100 * math.log(-spaceship_speed_x))
-        if begin.keyMap["strafe-right"]:
-            if spaceship_speed_x < 0:
-                spaceship_speed_x += 40 * math.log(-spaceship_speed_x)
-            elif spaceship_speed_x < 1:
-                spaceship_speed_x = 1.1
-            else:
-                spaceship_speed_x = 100 * math.log(spaceship_speed_x)
-        if begin.keyMap["strafe-up"]:
-            if spaceship_speed_z < 0:
-                spaceship_speed_z += 40 * math.log(-spaceship_speed_z)
-            elif spaceship_speed_z < 1:
-                spaceship_speed_z = 1.1
-            else:
-                spaceship_speed_z = 100 * math.log(spaceship_speed_z)
-        if begin.keyMap["strafe-down"]:
-            if spaceship_speed_z > 0:
-                spaceship_speed_z -= 40 * math.log(spaceship_speed_z)
-            elif spaceship_speed_z == 0:
-                spaceship_speed_z = -1.1
-            else:
-                spaceship_speed_z = -(100 * math.log(-spaceship_speed_z))
-        if begin.keyMap["roll-left"]:
-            camera_r = base.camera.getR()
-            base.camera.setR(camera_r - 1)
-        if begin.keyMap["roll-right"]:
-            camera_r = base.camera.getR()
-            base.camera.setR((camera_r + 1))
-        return Task.cont
-    
-    def score(self):
-        global score
-        self.title = OnscreenText(text="Score: {0}".format(score),
-                            parent=base.a2dTopLeft, scale=.07,
-                            align=TextNode.ALeft, pos=(0.1,-0.1),
-                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
-        return Task.cont
+    ##### // Mist Functions \\ #####
+    def setKey(self, key, value):
+        self.keyMap[key] = value
 
-bigBucks = begin()
-bigBucks.run()
+    def fullscreenToggle(self):
+        global FullSceeen
+        global Frames
+        wp = WindowProperties()
+        if (not(FullSceeen)):
+            wp.setFullscreen(True)
+            wp.setCursorHidden(True)
+            wp.setSize(3840,2160)
+            base.openMainWindow()
+            base.win.requestProperties(wp)
+            base.graphicsEngine.openWindows()
+            FullSceeen = True
+        else:
+            wp.setFullscreen(False)
+            wp.setCursorHidden(True)
+            wp.setSize(800,600)
+            base.openMainWindow()
+            base.win.requestProperties(wp)
+            base.graphicsEngine.openWindows()
+            FullSceeen = False
+        #Resizing clears frames. Reset that
+        base.setFrameRateMeter(Frames)
 
-"""
-**********           Done           **********
-> Spawn asteroids in sphere
-> Continue to spawn asteroids around the ship as flown through space
-> Add missle
-> Add asteroid movement animation
-> Give missles glow, and remove old missles so more than 13 will glow
-> Add basic score UI
+    def framesToggle(self):
+        global Frames
+        if(Frames):
+            base.setFrameRateMeter(False)
+            Frames = False
+        else:
+            base.setFrameRateMeter(True)
+            Frames = True
 
-********** Things that I need to do **********
+    def zerohpr(self):
+        base.camera.setHpr(0,0,0)
 
-> Detect when missle hits asteroid, then add a point
-> Generate asteroids in rectangular, sphereical, and pill shape
-> create 3 different sizes of asteroids w/ different speed
-    > At begininning all should be large, and med/small will only show becasue of shooting.
-> Add rotation to asteroids
-> Break asteroids upon impact with missle
-> Asteroids should break upon impact w/ eachother, but not give points.
-> Add a fail state to the game.
-> Organize the code, I should do this now, but I am lazy
-> Upgrade point system to be relative to ship speed, and density/speed of asteroid (easy, medium, hard)
-> Add a delay in space ship turning to make the game better
-> Add hud that shows points, global direction of ship, and lag between mouse and direction of ship
-> Particle effects
-> Main Menu (Dificulty select, and start) it would be cool if it looked like the original asteroids.
-    > This should include a name on the window.
-> Add a fail menu
-> Add loading menu (should be quick, but looks good.)
-"""
+    def printhpr(self):
+        print(base.camera.getHpr())
+
+class Asteroid(object):
+
+    def __init__(self, size, step=36):
+        types = {"large":  {"radius": 10000, "darkest_gray": 0.3, "lightest_gray": 0.7, "speed": 9000, "speed_percent": 5},
+                 "medium": {"radius": 5000,  "darkest_gray": 0.4, "lightest_gray": 0.7, "speed": 900,  "speed_percent": 10},
+                 "small":  {"radius": 1000,   "darkest_gray": 0.4, "lightest_gray": 0.7, "speed": 90,   "speed_percent": 20}}
+        #small should be 1000 -> 1500
+        #Step for creating the sphere, lower the number greater the detail of the shpere
+        self.radius         = types[size]["radius"]
+        self.darkest_gray   = types[size]["darkest_gray"]
+        self.lightest_gray  = types[size]["lightest_gray"]
+        self.speed          = types[size]["speed"]
+        self.speed_percent  = types[size]["speed_percent"]
+        self.step           = step
+        self.asteroid_min   = self.radius
+        self.asteroid_max   = self.radius + (self.radius / 2)
+        self.map            = self.create_map(self.radius)
+        geom                = self.create_geom(self.radius)
+        self.np             = NodePath(geom)
+        spawn_distance      = self.translate((random.random() ** 0.5),0,1,asteroid_min_spawn_distance, asteroid_spawn_distance)
+        self.asteroid_path(self.get_sphere_points(spawn_distance))
+        self.np.reparent_to(render)
+
+
+    def create_geom(self, sidelength):
+        # Set up the vertex arrays
+        vformat = GeomVertexFormat.getV3n3c4()
+        vdata = GeomVertexData("Data", vformat, Geom.UHDynamic)
+        vertex = GeomVertexWriter(vdata, 'vertex')
+        normal = GeomVertexWriter(vdata, 'normal')
+        color = GeomVertexWriter(vdata, 'color')
+        geom = Geom(vdata)
+
+        # Write vertex data
+        # Vertex data for the poles needs to be different
+        for key , value in self.map.items():
+            v_x, v_y, v_z, asteroid_color = value
+            n_x, n_y, n_z = 1,1,1
+            #c_r, c_g, c_b, c_a = asteroid_color, asteroid_color, asteroid_color, 1
+            c_r, c_g, c_b, c_a = asteroid_color, asteroid_color, asteroid_color, 1
+            vertex.addData3f(v_x, v_y, v_z)
+            normal.addData3f(n_x, n_y, n_z)
+            color.addData4f(c_r, c_g, c_b, c_a) 
+        #Create triangles
+        #top of sphere
+        verts_per_row = int(360 / self.step) + 1
+        for vert in range(1,verts_per_row + 1):
+            tris = GeomTriangles(Geom.UHStatic)
+            tris.addVertices(vert + 1, 0, vert)
+            tris.closePrimitive()
+            geom.addPrimitive(tris)
+        #middle of shpere
+        for row in range(1, int(180 / self.step) - 1):
+            for vert_iir in range(0, verts_per_row - 1): # vert_iir = vertex index in row, not vertex number
+                vert_number = verts_per_row * row + vert_iir + 1
+                vert_up_row = vert_number - verts_per_row
+                #Bottom Triangle in the sphere
+                tris = GeomTriangles(Geom.UHStatic)
+                tris.add_vertices(vert_up_row, vert_number, vert_up_row + 1)
+                tris.close_primitive()
+                geom.addPrimitive(tris)
+                #Top triangle of square
+                tris = GeomTriangles(Geom.UHStatic)
+                tris.add_vertices(vert_number + 1, vert_up_row + 1, vert_number)
+                tris.close_primitive()
+                geom.addPrimitive(tris)
+        #bottom of sphere
+        last_vert = len(self.map) - 1
+        for vert in range(last_vert - verts_per_row, last_vert):
+            tris = GeomTriangles(Geom.UHStatic)
+            tris.add_vertices(vert - 1, last_vert, vert)
+            tris.close_primitive()
+            geom.addPrimitive(tris)
+
+        # Create the actual node
+        node = GeomNode('geom_node')
+        node.addGeom(geom)
+        
+        return node
+
+    def translate(self, value, leftMin, leftMax, rightMin, rightMax):
+        # Scale value from input range to output range
+        leftSpan = leftMax - leftMin
+        rightSpan = rightMax - rightMin
+        valueScaled = float(value - leftMin) / float(leftSpan)
+        return rightMin + (valueScaled * rightSpan)
+
+
+    def simplex_radius(self, radius, seed, xoff, yoff, zoff):
+        noise = opens(seed=seed)
+        return self.translate(noise.noise3d(xoff,yoff,zoff),0,1,self.asteroid_min, self.asteroid_max)
+        #return radius
+
+    #map for most of the sphere
+    def create_map(self, radius):
+        map = collections.OrderedDict()
+        seed = int(time.time() * 10000000)
+        for x in range(0, 181, self.step):
+            #Top/Bottom of sphere need to be single points
+            if x == 0:
+                point_radius = self.simplex_radius(radius, seed, 0, 0, 1) 
+                map[(0,0)] = (0,0,point_radius, (self.translate(point_radius, self.asteroid_min, self.asteroid_max, self.darkest_gray, self.lightest_gray)))
+            elif x == 180:
+                point_radius = -(self.simplex_radius(radius, seed, 0, 0, -1)) 
+                map[(180,0)] = (0,0,point_radius, (self.translate(point_radius, -self.asteroid_min, -self.asteroid_max, self.darkest_gray, self.lightest_gray)))
+            #The rest of the sphere
+            else:
+                for y in range(0, 361, self.step):
+                    phi = x * (math.pi / 180.)
+                    theta = y * (math.pi / 180.)
+                    xoff = math.sin(phi) * math.cos(theta)
+                    yoff = math.sin(phi) * math.sin(theta) 
+                    zoff = math.cos(phi)
+                    point_radius = self.simplex_radius(radius, seed, xoff, yoff, zoff) 
+                    v_x = point_radius * xoff
+                    v_y = point_radius * yoff
+                    v_z = point_radius * zoff
+                    map[(x ,y)] = (v_x, v_y, v_z, (self.translate(point_radius, self.asteroid_min, self.asteroid_max, self.darkest_gray, self.lightest_gray)))
+        return map 
+
+    def asteroid_path(self, start_point): #takes starting location (start_point must be a LPoint3)
+        # Create and run the asteroid animation
+        self.asteroid_lerp = LerpPosInterval(self.np, # Object being manipulated. The asteroid in this case.
+                                            self.speed * random.randrange(1, self.speed_percent, 1), # How fast the asteroid will move in seconds
+                                            self.get_sphere_points(asteroid_future_distance, base.camera), # future location at end of lerp
+                                            start_point) # The start position of the asteroid
+        self.asteroid_lerp.start()
+
+    def get_sphere_points(self, radius, relative_to=False): #returns a LPoint3 in sphere. relative_to will return global LPoint3 realtive to given object.
+        phi = random.uniform(0,2*math.pi)
+        theta = random.uniform(0,2*math.pi)
+        if relative_to:
+            rel_xyz = relative_to.getPos()
+            x = radius * math.cos(phi) * math.sin(theta) + rel_xyz[0]
+            y = radius * math.sin(phi) * math.sin(theta) + rel_xyz[1]
+            z = radius * math.cos(theta) + rel_xyz[2]
+        else:
+            x = radius * math.cos(phi) * math.sin(theta)
+            y = radius * math.sin(phi) * math.sin(theta)
+            z = radius * math.cos(theta)
+        return LPoint3(x,y,z)
+
+class Location(object): # Create child of asteroid to find the future position the asteroid will fly to
+    def __init__(self, asteroid_parent, distance=asteroid_future_distance):
+        self.obj = loader.loadModel("./Models/sphere.egg")
+        self.obj.setY(asteroid_parent, distance)
+
+class Missle(object):
+    def __init__(self):
+        camera_hpr = base.camera.getHpr()
+        self.core = loader.loadModel("./Models/sphere.egg")
+        self.core.setPos(base.camera, (0,0,0))
+        self.core.setHpr(camera_hpr)
+        self.ttl = 1 # Time to live in seconds
+        self.core.setScale(600,600,600)
+        self.glow = loader.loadModel("./Models/sphere.egg")
+        self.core.setTransparency(TransparencyAttrib.MAlpha)
+        self.glow.setScale(2,2,2)
+        self.glow.reparentTo(self.core)
+        self.core.setColor(colors.get("white"))
+        self.glow.setColor(colors.get("white-transparent"))
+        self.glow.setPos(0,0,0) #relative to parent
+        self.core.setLightOff() # remove all other lights from missle so it is a bright white
+        missle_total.append(self)
+
+        #Create the light so the missle glows
+        plight = PointLight('plight')
+        plight.setColor(colors.get("white"))
+        plight.setAttenuation(LVector3(0, 0.00008 , 0))
+        plight.setMaxDistance(100)
+        self.plnp = self.core.attachNewNode(plight) #point light node point
+        render.setLight(self.plnp)
+        """for asteroid in asteroid_total:
+            asteroid.obj.setLight(plnp)""" #Might have to create a node point and attach that in the setup. Then add lights to that node point. I am going to bed now.
+
+        # Create and run the missle animation
+        location = Location(self.core).obj.getPos()
+        self.asteroid_lerp = LerpPosInterval(self.core, # Object being manipulated. The missle in this case.
+                                            1000, # How long it will take the missle to go from point a to b in seconds
+                                            location, # future location at end of lerp
+                                            base.camera.getPos()) # The start position of the missle
+        self.asteroid_lerp.start()
+        del location
+
+        self.core.reparentTo(render)
+
+demo = Begin()
+demo.run()

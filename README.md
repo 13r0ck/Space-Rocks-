@@ -9,7 +9,7 @@ This is currently a project to create a video game written in Python and powered
 * 3d percedural generation of asteroids via simplex noise
 
 ### Planned Features
-* More realistic Space fligh
+* More realistic Space flight
 * Menu
 * Colisons w/ Splitting asteroids
 * Point system
