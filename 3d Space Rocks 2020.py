@@ -40,6 +40,8 @@ test_max_min                = [0,0,0,0]
 class Begin(ShowBase):
     def __init__(self):
         # Basics
+        self.extra_smallasteroids = []
+        self.extra_mediumasteroids = []
         ShowBase.__init__(self)
         #Setup the window
         base.disableMouse()
@@ -110,14 +112,21 @@ class Begin(ShowBase):
             asteroid = Asteroid()
             asteroid_total.insert(0,asteroid)
             base.cTrav.addCollider(asteroid.c_np, self.collHandEvent)
-            print(asteroid.name)
             self.accept(f"missle-into-{asteroid.name}", self.shot_asteroid)
+            asteroid.add_togame()
+        # Extra asteroids to be instantly available when asteroids break
+        for i in range(0, int(asteroid_max * 0.05)):
+            self.extra_smallasteroids.insert(0,Asteroid("small"))
+        for i in range(0, int(asteroid_max * 0.05)):
+            self.extra_mediumasteroids.insert(0,Asteroid("medium"))
+
+        
 
     def startTasks(self):
         #The tasks below are the functions run every frame so the game will work
         taskMgr.add(Begin.test_distance, "Test Distance")
-        taskMgr.add(Begin.mouseTask, "Camera Look at Mouse")
-        taskMgr.add(Begin.spaceship_movement, "Move the Player or 'spaceship' ")
+        taskMgr.add(Begin.mouseTask, "Rotate player in hpr")
+        taskMgr.add(Begin.spaceship_movement, "Move the Player in xyz")
         taskMgr.add(Begin.remove_old_missles, "Remove old missles")
         taskMgr.add(Begin.score, "Score")
 
@@ -254,18 +263,37 @@ class Begin(ShowBase):
         for missle in missle_total:
             if missle.ttl <= 0:
                 render.clearLight(missle.plnp)
-                missle.core.detachNode()
+                missle.core.removeNode()
             else:
                 missle.ttl -= dt
         return Task.cont
 
     ##### // Colision Functions \\ #####
-    def shot_asteroid(self, collEntry):
+    def shot_asteroid(self, collision_entry):
         global score_list
         score_list.append(1)
-        print("hit")
-        print(collEntry)
-        
+        # Create particles
+
+        #Remove the missle
+        missle = collision_entry.getFromNodePath()
+        try:
+            render.clearLight(missle.parent.find("**/plight"))
+        except:
+            print(missle.parent)
+        missle.removeNode()
+        #Remove the Asteroid - small just delete, if not create two of smaller size
+        hit_asteroid = collision_entry.getIntoNodePath()
+        #na = new_asteroid , hap = hit asteroid position, has = hit asteroid size
+        hap = hit_asteroid.parent.getPos()
+        has = hit_asteroid.getTag("size")
+        hit_asteroid.parent.removeNode()
+        if not(hit_asteroid.getTag("size") == "small"):
+            for i in range(0,2):
+                na = self.extra_smallasteroids.pop() if has == "medium" else self.extra_mediumasteroids.pop()
+                na.add_togame(LPoint3(hap[0] + na.radius * int(random.uniform(-2,2)), hap[1] + na.radius * int(random.uniform(-2,2)), hap[2] + na.radius * int(random.uniform(-2,2))))
+                base.cTrav.addCollider(na.c_np, self.collHandEvent)
+                self.accept(f"missle-into-{na.name}", self.shot_asteroid)
+        print("collision completed")
 
     ##### // Developement Functions \\ #####
     def stop_moving(self):
@@ -316,7 +344,7 @@ class Begin(ShowBase):
         base.camera.setHpr(0,0,0)
 
     def printhpr(self):
-        print(base.camera.getHpr())
+        print(render.ls())
 
 class Asteroid(object):
 
@@ -325,8 +353,7 @@ class Asteroid(object):
                  "medium": {"radius": 5000,  "darkest_gray": 0.4, "lightest_gray": 0.7, "speed": 900,  "speed_percent": 10},
                  "small":  {"radius": 1000,   "darkest_gray": 0.4, "lightest_gray": 0.7, "speed": 90,   "speed_percent": 20}}
         # Variables needed for the size given
-        if not(size):
-            self.size       = random.choice(["small","medium","large"])
+        self.size           = random.choice(["small","medium","large"]) if not(size) else size
         self.radius         = types[self.size]["radius"]
         self.darkest_gray   = types[self.size]["darkest_gray"]
         self.lightest_gray  = types[self.size]["lightest_gray"]
@@ -341,28 +368,32 @@ class Asteroid(object):
         self.map            = self.create_map(self.radius)
         geom                = self.create_geom(self.radius)
         self.np             = NodePath(geom)
-        spawn_distance      = self.translate((random.random() ** 0.5),0,1,asteroid_min_spawn_distance, asteroid_spawn_distance)
-        # Set spawn location + final location + animation between the two
-        self.asteroid_path(self.get_sphere_points(spawn_distance))
-        
+        self.np.setTag("size", self.size)
         
         # Create and add the colision mesh to the asteroid
         cNode = CollisionNode(self.name)
         cNode.addSolid(CollisionSphere(0,0,0,self.radius + (self.radius / 4)))
         self.c_np = self.np.attachNewNode(cNode)
         
+
+    def add_togame(self, spawn_location=False):
+        # Set spawn location + final location + animation between the two
+        if spawn_location:
+            self.asteroid_path(spawn_location)
+        else:
+            spawn_distance      = self.translate((random.random() ** 0.5),0,1,asteroid_min_spawn_distance, asteroid_spawn_distance)
+            self.asteroid_path(self.get_sphere_points(spawn_distance))
         # Show the asteorid to the player
         self.np.reparent_to(render)
-
 
     def create_geom(self, sidelength):
         # Set up the vertex arrays
         vformat = GeomVertexFormat.getV3n3c4()
-        vdata = GeomVertexData("Data", vformat, Geom.UHDynamic)
-        vertex = GeomVertexWriter(vdata, 'vertex')
-        normal = GeomVertexWriter(vdata, 'normal')
-        color = GeomVertexWriter(vdata, 'color')
-        geom = Geom(vdata)
+        vdata   = GeomVertexData("Data", vformat, Geom.UHDynamic)
+        vertex  = GeomVertexWriter(vdata, 'vertex')
+        normal  = GeomVertexWriter(vdata, 'normal')
+        color   = GeomVertexWriter(vdata, 'color')
+        geom    = Geom(vdata)
 
         # Write vertex data
         # Vertex data for the poles needs to be different
@@ -438,16 +469,16 @@ class Asteroid(object):
             #The rest of the sphere
             else:
                 for y in range(0, 361, self.step):
-                    phi = x * (math.pi / 180.)
-                    theta = y * (math.pi / 180.)
-                    xoff = math.sin(phi) * math.cos(theta)
-                    yoff = math.sin(phi) * math.sin(theta) 
-                    zoff = math.cos(phi)
+                    phi          = x * (math.pi / 180.)
+                    theta        = y * (math.pi / 180.)
+                    xoff         = math.sin(phi) * math.cos(theta)
+                    yoff         = math.sin(phi) * math.sin(theta) 
+                    zoff         = math.cos(phi)
                     point_radius = self.simplex_radius(radius, self.seed, xoff, yoff, zoff) 
-                    v_x = point_radius * xoff
-                    v_y = point_radius * yoff
-                    v_z = point_radius * zoff
-                    map[(x ,y)] = (v_x, v_y, v_z, (self.translate(point_radius, self.asteroid_min, self.asteroid_max, self.darkest_gray, self.lightest_gray)))
+                    v_x          = point_radius * xoff
+                    v_y          = point_radius * yoff
+                    v_z          = point_radius * zoff
+                    map[(x ,y)]  = (v_x, v_y, v_z, (self.translate(point_radius, self.asteroid_min, self.asteroid_max, self.darkest_gray, self.lightest_gray)))
         return map 
 
     def asteroid_path(self, start_point): #takes starting location (start_point must be a LPoint3)
@@ -482,9 +513,9 @@ class Missle(object):
         camera_hpr = base.camera.getHpr()
         self.name = "missle"
         self.core = loader.loadModel("./Models/sphere.egg")
+        self.ttl  = 1 # Time to live in seconds
         self.core.setPos(base.camera, (0,0,0))
         self.core.setHpr(camera_hpr)
-        self.ttl = 1 # Time to live in seconds
         self.core.setScale(600,600,600)
         self.glow = loader.loadModel("./Models/sphere.egg")
         self.core.setTransparency(TransparencyAttrib.MAlpha)
@@ -510,6 +541,7 @@ class Missle(object):
         cNode = CollisionNode(self.name)
         cNode.addSolid(CollisionSphere(0,0,0,2))
         self.c_np = self.core.attachNewNode(cNode)
+        #self.c_np.name = "name"
 
         # Create and run the missle animation
         location = Location(self.core).obj.getPos()
