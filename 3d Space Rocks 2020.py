@@ -16,28 +16,25 @@ from direct.gui.OnscreenText import OnscreenText
 from direct.interval.IntervalGlobal import *
 
 asteroid_spawn_distance     = 990000 # How close the asteroids spawn and how far away they will fly to
-asteroid_min_spawn_distance = 5000
+asteroid_min_spawn_distance = 10000
 asteroid_future_distance    = 2000000 # How far the asteroid will travel
 asteroid_total              = []
 extra_smallasteroids        = []
 extra_mediumasteroids       = []
 missle_total                = []
-asteroid_max                = 500 # The maximum number of asteroids ***** MUST BE AN EVEN NUMBER  and make sur eto modify loop_test_number global variable*****
+asteroid_max                = 1000 # The maximum number of asteroids ***** MUST BE AN EVEN NUMBER  and make sur eto modify loop_test_number global variable*****
 spaceship_speed_const       = 200
 spaceship_speed_x           = 0
 spaceship_speed_y           = 0
 spaceship_speed_z           = 0
 colors                      = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4)}
-loop_test                   = 0 # Used to limit the number of asteroids that have their distance tested each frame
-loop_test_number            = 500 # The number of asteroids to test their distance each frame ***** ASTEROID_MAX MUST BE EVENLY DIVISIBLE BY THIS NUMBER - WILL FIX THIS LATER *****
-last_frame_mpos_x           = 0
-last_frame_mpos_y           = 0
 asteroid_test_distance      = 999000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
 score                       = 0  # Initialize score
 score_list                  = [0]
 FullSceeen                  = False
 Frames                      = True
 test_max_min                = [0,0,0,0]
+max_player_speed            = 5000
 
 class Begin(ShowBase):
     def __init__(self):
@@ -48,10 +45,12 @@ class Begin(ShowBase):
         if Frames:
             base.setFrameRateMeter(True)
         base.camLens.setFar(asteroid_spawn_distance * 100)
+        # Set mouse and display settings
         render.setAntialias(AntialiasAttrib.MAuto)
         wp = WindowProperties()
-        wp.setSize(800,600)
+        wp.setMouseMode(WindowProperties.M_relative)
         wp.setCursorHidden(True)
+        wp.setSize(800,600)
         self.win.requestProperties(wp)
         self.setBackgroundColor(colors.get("black"))
         # Lights
@@ -105,10 +104,15 @@ class Begin(ShowBase):
         self.accept('f12', self.framesToggle)
         # Development keys
         self.accept('0', self.stop_moving) # Stop moving
-        self.accept('1', self.zerohpr)
-        self.accept('2', self.printhpr)
+        self.accept('1', self.angle1)
+        self.accept('2', self.angle2)
+        self.accept('3', self.angle3)
+        self.accept('4', self.angle4)
+        self.accept('5', self.angle5)
+        self.accept('6', self.angle6)
 
         # Create the geometry
+        self.lastMouseX, self.lastMouseY = 0, 0
         self.startTasks()
         self.createAsteroids()
 
@@ -129,7 +133,7 @@ class Begin(ShowBase):
     def startTasks(self):
         #The tasks below are the functions run every frame so the game will work
         taskMgr.add(Begin.test_distance, "Test Distance")
-        taskMgr.add(Begin.mouseTask, "Rotate player in hpr")
+        taskMgr.add(self.mouseTask, "Rotate player in hpr")
         taskMgr.add(Begin.spaceship_movement, "Move the Player in xyz")
         taskMgr.add(Begin.remove_old_missles, "Remove old missles")
         taskMgr.add(Begin.score, "Score")
@@ -140,54 +144,37 @@ class Begin(ShowBase):
         global spaceship_speed_x
         global spaceship_speed_y
         global spaceship_speed_z
-        #dt = globalClock.getDt() # The change in time since the last frame
+        global max_player_speed
+        cam_pos = base.camera.getPos()
 
-        base.camera.setPos(base.camera, spaceship_speed_x, # Spaceship X change per frame
-                                        spaceship_speed_y, # Spaceship Y change per frame
-                                        spaceship_speed_z) #   "       Z   "     "    "
-        if Begin.keyMap["forward"]:
-            if spaceship_speed_y < 0:
-                spaceship_speed_y += 40 * math.log(-spaceship_speed_y)
-            elif spaceship_speed_y < 1:
-                spaceship_speed_y = 1.1
-            else:
-                spaceship_speed_y = 800 * math.log(spaceship_speed_y)
-            #spaceship_speed_y = (10000 / 1 + math.exp(-0.000000001 * (spaceship_speed_y - 500000000))) - 1
-        if Begin.keyMap["backward"]:
-            if spaceship_speed_y > 0:
-                spaceship_speed_y -= 40 * math.log(spaceship_speed_y)
-            elif spaceship_speed_y == 0:
-                spaceship_speed_y = -1.1
-            else:
-                spaceship_speed_y = -(100 * math.log(-spaceship_speed_y))
-        if Begin.keyMap["strafe-left"]:
-            if spaceship_speed_x > 0:
-                spaceship_speed_x -= 40 * math.log(spaceship_speed_x)
-            elif spaceship_speed_x == 0:
-                spaceship_speed_x = -1.1
-            else:
-                spaceship_speed_x = -(100 * math.log(-spaceship_speed_x))
-        if Begin.keyMap["strafe-right"]:
-            if spaceship_speed_x < 0:
-                spaceship_speed_x += 40 * math.log(-spaceship_speed_x)
-            elif spaceship_speed_x < 1:
-                spaceship_speed_x = 1.1
-            else:
-                spaceship_speed_x = 100 * math.log(spaceship_speed_x)
-        if Begin.keyMap["strafe-up"]:
-            if spaceship_speed_z < 0:
-                spaceship_speed_z += 40 * math.log(-spaceship_speed_z)
-            elif spaceship_speed_z < 1:
-                spaceship_speed_z = 1.1
-            else:
-                spaceship_speed_z = 100 * math.log(spaceship_speed_z)
-        if Begin.keyMap["strafe-down"]:
-            if spaceship_speed_z > 0:
-                spaceship_speed_z -= 40 * math.log(spaceship_speed_z)
-            elif spaceship_speed_z == 0:
-                spaceship_speed_z = -1.1
-            else:
-                spaceship_speed_z = -(100 * math.log(-spaceship_speed_z))
+        # These coord modicifations do not appear to be correct according to what the docs for .setPos
+        # want. That is becasuse the they are converting from realtice rotation to global positioning
+        base.camera.setPos(cam_pos[0] + -spaceship_speed_y, # Spaceship X change per frame
+                            cam_pos[1] + spaceship_speed_x, # Spaceship Y change per frame
+                            cam_pos[2] + spaceship_speed_z) #   "       Z   "     "    "
+        if Begin.keyMap["forward"] or Begin.keyMap["backward"]:
+            #acc_const = acceleration constant
+            acc_const = 100
+            if Begin.keyMap["backward"]:
+                acc_const *= -1
+            cam_hpr = base.camera.getHpr(render)
+            phi, theta = cam_hpr[0], cam_hpr[1]
+            phi *= math.pi / 180
+            theta *= math.pi / 180
+            # Calculate component vectors
+            x = math.cos(phi) * math.cos(theta)
+            y = math.sin(phi) * math.cos(theta)
+            z = math.sin(theta)
+            # Calculate the magnitude, and limit speed to that
+            mag = math.sqrt((spaceship_speed_x * x)**2 + (spaceship_speed_y * y)**2 + (spaceship_speed_z * z)**2)
+            if mag < max_player_speed:
+                spaceship_speed_x = min(spaceship_speed_x + acc_const * x, max_player_speed)
+                spaceship_speed_y = min(spaceship_speed_y + acc_const * y, max_player_speed)
+                spaceship_speed_z = min(spaceship_speed_z + acc_const * z, max_player_speed)
+            print(f"speed_x{spaceship_speed_x} speed_y{spaceship_speed_y} speed_z{spaceship_speed_z}")
+            print(base.camera.getPos())
+            print(f"phi{phi} theta{theta}")
+
         if Begin.keyMap["roll-left"]:
             camera_r = base.camera.getR()
             base.camera.setR(camera_r - 1)
@@ -211,7 +198,7 @@ class Begin(ShowBase):
             try:
                 self.title.clearText()
             except:
-                print("no title yet")
+                pass
             self.title = OnscreenText(text="Score: {0}".format(score),
                                 parent=base.a2dTopLeft, scale=.07,
                                 align=TextNode.ALeft, pos=(0.1,-0.1),
@@ -220,8 +207,6 @@ class Begin(ShowBase):
 
     # Test the distance of all asteroids. If the asteroid is too far away turn it around.
     def test_distance(self): 
-        global loop_test
-        global loop_test_number
         global asteroid_max
         global asteroid_test_distance
         for asteroid in asteroid_total:
@@ -232,37 +217,42 @@ class Begin(ShowBase):
                 future_pos = asteroid.get_sphere_points(asteroid_spawn_distance, base.camera)
                 asteroid.asteroid_lerp.finish()
                 asteroid.asteroid_path(future_pos) #move to sphere relative to camera
-
-        # This manages the number of asteroids tested each frame. Also makes sure not to read invalid index of asteroid_total array.
-        if loop_test == asteroid_max - loop_test_number:
-            loop_test = 0
-        else:
-            loop_test += loop_test_number
         return Task.cont
 
-    def mouseTask(self):
-        # Check to make sure the mouse is readable
-        global last_frame_mpos_x
-        global last_frame_mpos_y
+    def mouseTask(self, task):
         global test_max_min
-        if base.mouseWatcherNode.hasMouse():
-            mpos = base.mouseWatcherNode.getMouse()
-            mpos_x = mpos[0]
-            mpos_y = mpos[1]
-            if (mpos[0] == last_frame_mpos_x):
-                mpos_x = 0
-            if (mpos[1] == last_frame_mpos_y):
-                mpos_y = 0
-            p = base.camera.getP()
-            h = base.camera.getH()
-            base.camera.setP(base.camera, mpos_y * 52) #mpos[1] = y value
-            base.camera.setH(base.camera, mpos_x * -50) #[0] = x value
-            last_frame_mpos_x = mpos[0]
-            last_frame_mpos_y = mpos[1]
-            base.win.movePointer(0,
-            int(base.win.getProperties().getXSize() / 2),
-            int(base.win.getProperties().getYSize() / 2))
-        return Task.cont  # Task continues infinitely
+        # h_max : h_min , p_max : p_min
+        mw = self.mouseWatcherNode
+        if mw.hasMouse():
+            # get the window manager's idea of the mouse position
+            x, y = mw.getMouseX(), mw.getMouseY()
+
+            if self.lastMouseX is not None:
+                dx, dy = x - self.lastMouseX, y - self.lastMouseY
+            else:
+                # no data to compare with yet
+                dx, dy = 0, 0
+
+            self.lastMouseX, self.lastMouseY = x, y
+        else:
+            x, y, dx, dy = 0, 0, 0, 0
+
+        self.win.movePointer(0,
+              int(self.win.getProperties().getXSize() / 2),
+              int(self.win.getProperties().getYSize() / 2))
+        self.lastMouseX, self.lastMouseY = 0, 0
+
+        # scale position and delta to pixels for user
+        w, h = self.win.getSize()
+
+        # rotate box by delta
+        base.camera.setH(base.camera, dx * -10)
+        base.camera.setP(base.camera, dy * 10)
+        test_max_min = [max(test_max_min[0], base.camera.getH(render)), min(test_max_min[1], base.camera.getH(render)), max(test_max_min[2], base.camera.getP(render)), min(test_max_min[3], base.camera.getP(render))]
+        #print(f"h_max {test_max_min[0]} : h_min {test_max_min[1]} , p_max {test_max_min[2]} : p_min {test_max_min[3]}")
+        #base.camera.setH(base.camera.getH() - dx * 10)
+        #base.camera.setP(base.camera.getP() + dy * 10)
+        return Task.cont
 
     def remove_old_missles(self):
         global missle_total
@@ -289,8 +279,6 @@ class Begin(ShowBase):
     def shot_asteroid(self, collision_entry):
         global score_list
         score_list.append(1)
-        # Create particles
-
         #Remove the missle
         missle = collision_entry.getFromNodePath()
         try:
@@ -298,29 +286,43 @@ class Begin(ShowBase):
         except:
             pass
         missle.removeNode()
-        #Remove the Asteroid - small just delete, if not create two of smaller size
+
+        # Gather large asteroid info so still accesable after deleted
         hit_asteroid = collision_entry.getIntoNodePath()
-        #na = new_asteroid , hap = hit asteroid position, has = hit asteroid size
         hap = hit_asteroid.parent.getPos()
         has = hit_asteroid.parent.getTag("size")
+        # Remove asteroid from list
         for index in range(0,len(asteroid_total) -1):
             if asteroid_total[index].name == hit_asteroid.name:
                 del asteroid_total[index]
                 break
+        # Delete before smaller asteoids are created to allow for asteroid-into-asteroid collisions
         hit_asteroid.parent.removeNode()
+        
+        # If small asteroid, just delete, if not create two of smaller size
+        # Note: na is short for "new_asteroid", has is "hit_asteroid_size"
         if not(has == "small"):
+            # Generate 2 asteroids at oposite poistions (shimmy) within the larger asteoid, and oposite directions
             for index in range(0,2):
                 na = extra_smallasteroids.pop() if has == "medium" else extra_mediumasteroids.pop()
+                # First asteroid can be random pos & direction
                 if index == 0:
-                    shimmy = [na.radius * int(random.randrange(-1,2,2)), na.radius * int(random.randrange(-1,2,2)), na.radius * int(random.randrange(-1,2,2))]
+                    shimmy = [na.radius * random.randrange(-1,2,2), na.radius * random.randrange(-1,2,2), na.radius * random.randrange(-1,2,2)]
                     spawn_point = [hap[0] + shimmy[0], hap[1] + shimmy[1], hap[2] + shimmy[2]]
+                    print(hap)
+                    print(shimmy)
+                    print(spawn_point)
                     future_location = False
+                # Second asteroid should be oposite pos & direction of asteroid 1
                 else:
                     spawn_point = [hap[0] + shimmy[0] * -1, hap[1] + shimmy[1] * -1, hap[2] + shimmy[2] * -1]
                     future_location = LPoint3(future_location[0] * -1, future_location[1] * -1, future_location[2] * -1)
+                # Add asteroid to the game. This code is the same for both asteroids
                 na.add_togame(LPoint3(spawn_point[0], spawn_point[1], spawn_point[2]), future_location)
                 future_location = na.future_location
                 base.cTrav.addCollider(na.c_np, self.collHandEvent)
+                asteroid_total.append(na)
+            # Create more asteroid for the ones we just deleted
             for i in range(0,2):
                 if na.size == "small":
                     extra_smallasteroids.insert(0,Asteroid("small"))
@@ -333,23 +335,23 @@ class Begin(ShowBase):
             asteroid.add_togame(asteroid.get_sphere_points(asteroid_spawn_distance, base.camera))
 
     def end_game(self, collision_entry):
-        # Stop all input, make game red, rotate player, ask to play again
+        asteroid = collision_entry.getIntoNodePath()
+        # Make the world red
         self.fog.setColor(1,0,0)
         self.fog.setExpDensity(.000004)
         self.setBackgroundColor(1,0,0,1)
-        spaceship_speed_x = 0
-        spaceship_speed_y = 0
-        spaceship_speed_z = 0
-        rand_spin_axis = random.choice(["setH", "setP", "setR"])
-        rand_spin_direction = random.randrange(-1,2,2)
+        # Set random spin upon death. This is called in the death_task 
         base.camera.setTag("h_speed", str(random.randrange(0,1)))
         base.camera.setTag("p_speed", str(random.randrange(0,1)))
         base.camera.setTag("r_speed", str(random.uniform(0,0.5)))
+        # Stop unused tasks in death
         taskMgr.remove("Rotate player in hpr")
         taskMgr.remove("Score")
         taskMgr.remove("Move the Player in xyz")
-        base.camera.setX(base.camera.getX() + 1000)
-        base.camera.lookAt(collision_entry.getIntoNodePath())
+        # Move player and look so player gets to see their killer
+        base.camera.setX(base.camera.getX() + int(asteroid.parent.getTag("radius")))
+        base.camera.lookAt(asteroid)
+        # Start the death spiral + death text
         taskMgr.add(Begin.death_task, "Death Spin")
         self.title = OnscreenText(text="Your Spaceship has Crashed",
                             parent=base.aspect2d, scale=0.1,
@@ -364,8 +366,37 @@ class Begin(ShowBase):
         spaceship_speed_x = 0
         spaceship_speed_y = 0
         spaceship_speed_z = 0
+        print(base.camera.getHpr())
+        base.camera.setPos(0,0,0)
+        print(base.camera.getPos())
 
-    ##### // Mist Functions \\ #####
+    def angle1(self):
+        print("0,0,0")
+        base.camera.setHpr(0,0,0)
+
+    def angle2(self):
+        print("90,0,0")
+        base.camera.setHpr(90,0,0)
+
+    def angle3(self):
+        print("180,0,0")
+        base.camera.setHpr(180,0,0)
+
+    def angle4(self):
+        print("-90,0,0")
+        base.camera.setHpr(-90,0,0)
+
+    def angle5(self):
+        print("0,90,0")
+        print(base.camera.getHpr())
+        base.camera.setHpr(0,90,0)
+
+    def angle6(self):
+        print("0,-90,0")
+        print(base.camera.getHpr())
+        base.camera.setHpr(0,-90,0)
+
+    ##### // Misc Functions \\ #####
     def setKey(self, key, value):
         self.keyMap[key] = value
 
@@ -376,6 +407,9 @@ class Begin(ShowBase):
         if (not(FullSceeen)):
             wp.setFullscreen(True)
             wp.setCursorHidden(True)
+            wp.setMouseMode(WindowProperties.M_relative)
+            #self.base.win.getProperties().getXSize()
+            #self.base.win.getProperties().getYSize
             wp.setSize(3840,2160)
             base.openMainWindow()
             base.win.requestProperties(wp)
@@ -384,6 +418,7 @@ class Begin(ShowBase):
         else:
             wp.setFullscreen(False)
             wp.setCursorHidden(True)
+            wp.setMouseMode(WindowProperties.M_relative)
             wp.setSize(800,600)
             base.openMainWindow()
             base.win.requestProperties(wp)
@@ -400,12 +435,6 @@ class Begin(ShowBase):
         else:
             base.setFrameRateMeter(True)
             Frames = True
-
-    def zerohpr(self):
-        base.camera.setHpr(0,0,0)
-
-    def printhpr(self):
-        print(render.ls())
 
 class Asteroid(object):
 
@@ -425,12 +454,13 @@ class Asteroid(object):
         self.asteroid_min   = self.radius
         self.asteroid_max   = self.radius + (self.radius / 2)
         self.name           = f"{self.size}_{self.seed}"
-        #self.name = "asteroid"
         # Procedurally generate the asteroid
         self.map            = self.create_map(self.radius)
         geom                = self.create_geom(self.radius)
         self.np             = NodePath(geom)
+        # NodePath tags used later, particulary in the collision functions
         self.np.setTag("size", self.size)
+        self.np.setTag("radius", str(self.radius))
         
         # Create and add the colision mesh to the asteroid
         cNode = CollisionNode("asteroid")
@@ -619,6 +649,8 @@ class Missle(object):
         del location
 
         self.core.reparentTo(render)
+
+# Note to self. I can use self. in tasks to avoid having to use global variables
 
 demo = Begin()
 demo.run()
