@@ -22,12 +22,12 @@ asteroid_total              = []
 extra_smallasteroids        = []
 extra_mediumasteroids       = []
 missle_total                = []
+pointball_total             = []
 asteroid_max                = 300 # The maximum number of asteroids ***** MUST BE AN EVEN NUMBER  and make sur eto modify loop_test_number global variable*****
-spaceship_speed_const       = 200
 spaceship_speed_x           = 0
 spaceship_speed_y           = 0
 spaceship_speed_z           = 0
-colors                      = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4), "blue": (0,0,1,1), "blue-transparent": (0,0,1,0.4)}
+colors                      = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4), "blue": (0, 0.8,1,1), "blue-transparent": (0,0.8,1,0.7)}
 asteroid_test_distance      = 2900000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
 score                       = 0  # Initialize score
 score_list                  = [0]
@@ -96,6 +96,8 @@ class Begin(ShowBase):
         self.accept("space-up", self.setKey, ["strafe-up", False])
         self.accept("control", self.setKey, ["strafe-down", True])
         self.accept("control-up", self.setKey, ["strafe-down", False])
+        self.accept("shift", self.setKey, ["strafe-down", True])
+        self.accept("shift-up", self.setKey, ["strafe-down", False])
         self.accept("q", self.setKey, ["roll-left", True])
         self.accept("q-up", self.setKey, ["roll-left", False])
         self.accept("e", self.setKey, ["roll-right", True])
@@ -137,49 +139,58 @@ class Begin(ShowBase):
         taskMgr.add(self.mouseTask, "Rotate player in hpr")
         taskMgr.add(Begin.spaceship_movement, "Move the Player in xyz")
         taskMgr.add(Begin.remove_old_missles, "Remove old missles")
+        taskMgr.add(Begin.remove_old_pointballs, "Remove old pointballs")
         taskMgr.add(Begin.score, "Score")
 
     ##### // Key Press Functions \\ #####
     def spaceship_movement(self):
-        global spaceship_speed_const
         global spaceship_speed_x
         global spaceship_speed_y
         global spaceship_speed_z
         global max_player_speed
-        cam_pos = base.camera.getPos()
+        """
+        I think that all of this going to have to be rebuilt.
 
-        # These coord modicifations do not appear to be correct according to what the docs for .setPos
-        # want. That is becasuse the they are converting from realtice rotation to global positioning
-        base.camera.setPos(cam_pos[0] + -spaceship_speed_y, # Spaceship X change per frame
-                            cam_pos[1] + spaceship_speed_x, # Spaceship Y change per frame
-                            cam_pos[2] + spaceship_speed_z) #   "       Z   "     "    "
-        if Begin.keyMap["forward"] or Begin.keyMap["backward"]:
+        My thinking is to 
+        1. move player globaly relative to global xyz variables
+        2. grab player global pos
+        3. move player localy relative to keys pressed
+        4. grab player global pos
+        5. calculate the change of the location in global xyz
+        6. add the change in xyz to the global xyz variables
+        7. Start at 1 on next frame
+        """
+        local_x, local_y, local_z = 0, 0, 0
+        cam_pos_init = base.camera.getPos()
+        base.camera.setPos(cam_pos_init[0] + spaceship_speed_x, # Spaceship X change per frame
+                            cam_pos_init[1] + spaceship_speed_y, # Spaceship Y change per frame
+                            cam_pos_init[2] + spaceship_speed_z) #   "       Z   "     "    "
+        if Begin.keyMap["forward"] or Begin.keyMap["backward"] or Begin.keyMap["strafe-left"] or Begin.keyMap["strafe-right"] or Begin.keyMap["strafe-up"] or Begin.keyMap["strafe-down"]:
+            cam_pos1 = base.camera.getPos()
             #acc_const = acceleration constant
-            acc_const = 100
+            if Begin.keyMap["forward"]:
+                local_x += 10
             if Begin.keyMap["backward"]:
-                acc_const *= -1
-            cam_hpr = base.camera.getHpr(render)
-            phi, theta = cam_hpr[0], cam_hpr[1]
-            phi *= math.pi / 180
-            theta *= math.pi / 180
-            # Calculate component vectors
-            x = math.cos(phi) * math.cos(theta)
-            y = math.sin(phi) * math.cos(theta)
-            z = math.sin(theta)
-            # Calculate the magnitude, and limit speed to that
-            mag = min(math.sqrt((spaceship_speed_x * x)**2 + (spaceship_speed_y * y)**2 + (spaceship_speed_z * z)**2), max_player_speed)
-            print(f"mag {mag}")
-            if mag < max_player_speed:
-                print(mag)
-                print(f"spsx {spaceship_speed_x} , spsy {spaceship_speed_y} , spsz {spaceship_speed_z}")
-                print(f"x {x}, y {y}, z {z}")
-                spaceship_speed_x += acc_const * x
-                spaceship_speed_y += acc_const * y
-                spaceship_speed_z += acc_const * z
-            #print(f"speed_x{spaceship_speed_x} speed_y{spaceship_speed_y} speed_z{spaceship_speed_z}")
-            #print(base.camera.getPos())
-            #print(f"phi{phi} theta{theta}")
-
+                local_x -= 5
+            if Begin.keyMap["strafe-right"]:
+                local_y += 5
+            if Begin.keyMap["strafe-left"]:
+                local_y -= 5
+            if Begin.keyMap["strafe-up"]:
+                local_z += 5
+            if Begin.keyMap["strafe-down"]:
+                local_z -= 5
+            base.camera.setPos(base.camera, local_y, local_x, local_z)
+            cam_pos2 = base.camera.getPos()
+            #Calculate the velocity change from the local change
+            # dv_xyz delta velocity xyz
+            dv_xyz = []
+            dt = globalClock.getDt()
+            dv_xyz = [(cam_pos2[i] - cam_pos1[i]) / dt for i in range(0,3)]
+            spaceship_speed_x += dv_xyz[0]
+            spaceship_speed_y += dv_xyz[1]
+            spaceship_speed_z += dv_xyz[2]
+            
         if Begin.keyMap["roll-left"]:
             camera_r = base.camera.getR()
             base.camera.setR(camera_r - 1)
@@ -275,6 +286,17 @@ class Begin(ShowBase):
                 missle.ttl -= dt
         return Task.cont
 
+    def remove_old_pointballs(self):
+        global pointball_total
+        dt = globalClock.getDt() # delta t per frame
+        for pointball in pointball_total:
+            if pointball.ttl <= 0:
+                render.clearLight(pointball.plnp)
+                pointball.model.removeNode()
+            else:
+                pointball.ttl -= dt
+        return Task.cont
+
     def death_task(self):
         camera_hpr = base.camera.getHpr()
         h_speed = float(base.camera.getTag("h_speed"))
@@ -287,6 +309,7 @@ class Begin(ShowBase):
     ##### // Colision Functions \\ #####
     def shot_asteroid(self, collision_entry):
         global score_list
+        global pointball_total
 
         #Remove the missle
         missle = collision_entry.getFromNodePath()
@@ -306,8 +329,6 @@ class Begin(ShowBase):
             if asteroid_total[index].name == hit_asteroid.name:
                 del asteroid_total[index]
                 break
-        # Create the point ball
-        point_ball = PointBall(hap)
         # Delete before smaller asteoids are created to allow for asteroid-into-asteroid collisions
         hit_asteroid.parent.removeNode()
         
@@ -340,6 +361,8 @@ class Begin(ShowBase):
                     extra_mediumasteroids.insert(0,Asteroid("medium"))
 
         else:
+            # Create the point ball
+            pointball_total.append(PointBall(hap))
             asteroid = Asteroid()
             asteroid_total.insert(0, asteroid)
             base.cTrav.addCollider(asteroid.c_np, self.collHandEvent)
@@ -386,26 +409,23 @@ class Begin(ShowBase):
         base.camera.setHpr(0,0,0)
 
     def angle2(self):
-        total = 0
-        for a in asteroid_total:
-            if a.np.getTag("Created") == "True":
-                total += 1
-                print(f"pos {a.np.getPos()} - {a.np.getTag('Name')}")
-        print(f"total {total}")
+        print("90,0,0")
+        base.camera.setHpr(90,0,0)
 
     def angle3(self):
-        taskMgr.remove("Test Distance")
+        print("180,0,0")
+        base.camera.setHpr(180,0,0)
 
     def angle4(self):
-        taskMgr.add(Begin.test_distance, "Test Distance")
+        print("270,0,0")
+        base.camera.setHpr(270,0,0)
 
     def angle5(self):
-        print("0,90,0")
-        print(base.camera.getHpr())
+        print("0,-90,0")
         base.camera.setHpr(0,90,0)
 
     def angle6(self):
-        print("0,-90,0")
+        print("0,90,0")
         print(base.camera.getHpr())
         base.camera.setHpr(0,-90,0)
 
@@ -448,6 +468,19 @@ class Begin(ShowBase):
         else:
             base.setFrameRateMeter(True)
             Frames = True
+
+    def translate(self, value, leftMin, leftMax, rightMin, rightMax):
+        #print(self)
+        #print(value)
+        #print(leftMin)
+        #print(leftMax)
+        #print(rightMin)
+        #print(rightMax)
+        # Scale value from input range to output range
+        leftSpan = leftMax - leftMin
+        rightSpan = rightMax - rightMin
+        valueScaled = float(value - leftMin) / float(leftSpan)
+        return rightMin + (valueScaled * rightSpan)
 
 class Asteroid(object):
 
@@ -626,7 +659,7 @@ class Missle(object):
         camera_hpr = base.camera.getHpr()
         self.name = "missle"
         self.core = loader.loadModel("./Models/sphere.egg")
-        self.ttl  = 2 # Time to live in seconds
+        self.ttl  = 1 # Time to live in seconds
         self.core.setPos(base.camera, (0,0,0))
         self.core.setHpr(camera_hpr)
         self.core.setScale(600,600,600)
@@ -650,7 +683,7 @@ class Missle(object):
 
         # Create hitsphere
         cNode = CollisionNode(self.name)
-        cNode.addSolid(CollisionSphere(0,0,0,2))
+        cNode.addSolid(CollisionSphere(0,0,0,1))
         self.c_np = self.core.attachNewNode(cNode)
 
         # Create and run the missle animation
@@ -669,10 +702,10 @@ class Missle(object):
 class PointBall(object):
     def __init__(self, position):
         self.model = loader.loadModel("./Models/sphere.egg")
-        self.ttl = 30 #Time to live in seconds
+        self.ttl = 10 #Time to live in seconds
         self.model.setPos(position)
-        self.model.setColor(colors.get("blue"))
-        self.model.setScale(10000,10000,10000)
+        self.model.setColor(colors.get("blue-transparent"))
+        self.model.setScale(5000,5000,5000)
         self.model.setLightOff()
 
         #Create the light so the missle glows
