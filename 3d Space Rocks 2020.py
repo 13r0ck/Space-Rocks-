@@ -15,6 +15,7 @@ import time
 from direct.gui.OnscreenText import OnscreenText
 from direct.interval.IntervalGlobal import *
 
+#Gameplay variables
 asteroid_spawn_distance     = 2900000 # How close the asteroids spawn and how far away they will fly to
 asteroid_min_spawn_distance = 100000
 asteroid_future_distance    = 10000000 # How far the asteroid will travel
@@ -27,7 +28,18 @@ asteroid_max                = 300 # The maximum number of asteroids ***** MUST B
 spaceship_speed_x           = 0
 spaceship_speed_y           = 0
 spaceship_speed_z           = 0
-colors                      = {"orange": (.9,.6,.05,1), "gray": (.1,.1,.1,1), "black": (0,0,0,1), "white": (1,1,1,1), "white-transparent": (1,1,1,0.4), "red": (1,0,0,1), "red-transparent": (1,0,0,0.4), "yellow-tinge": (1,1,0.8,1), "yellow-tinge-transparent": (1,1,0.8,0.4), "blue": (0, 0.8,1,1), "blue-transparent": (0,0.8,1,0.7)}
+colors                      = {"orange": (.9,.6,.05,1),
+                               "gray": (.1,.1,.1,1),
+                               "black": (0,0,0,1),
+                               "white": (1,1,1,1),
+                               "white-transparent": (1,1,1,0.4),
+                               "red": (1,0,0,1),
+                               "red-transparent": (1,0,0,0.4),
+                               "yellow-tinge": (1,1,0.8,1),
+                               "yellow-tinge-transparent": (1,1,0.8,0.4),
+                               "blue": (0, 0.8,1,1),
+                               "blue-transparent": (0,0.8,1,0.7),
+                               "lightblue-transparent": (0.8,1,1,0.7)}
 asteroid_test_distance      = 2900000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
 score                       = 0  # Initialize score
 score_list                  = [0]
@@ -35,9 +47,13 @@ FullSceeen                  = False
 Frames                      = True
 test_max_min                = [0,0,0,0]
 max_player_speed            = 5000
+pointball_value             = 0
+# Windows settings
+loadPrcFileData('', 'window-title 3d Space Rocks 2020')
 
 class Begin(ShowBase):
     def __init__(self):
+        global pointball_value
         # Basics
         ShowBase.__init__(self)
         #Setup the window
@@ -46,6 +62,7 @@ class Begin(ShowBase):
             base.setFrameRateMeter(True)
         base.camLens.setFar(asteroid_spawn_distance * 100)
         # Set mouse and display settings
+        self.lastMouseX, self.lastMouseY = 0, 0
         render.setAntialias(AntialiasAttrib.MAuto)
         wp = WindowProperties()
         wp.setMouseMode(WindowProperties.M_relative)
@@ -53,7 +70,7 @@ class Begin(ShowBase):
         wp.setSize(800,600)
         self.win.requestProperties(wp)
         self.setBackgroundColor(colors.get("black"))
-        # Lights
+        # Create the directional and ambient lights, and apply them to the world.
         ambientLight = AmbientLight("ambientLight")
         ambientLight.setColor((0.8, 0.8, 0.8, 1))
         directionalLight = DirectionalLight("directionalLight")
@@ -62,7 +79,7 @@ class Begin(ShowBase):
         directionalLight.setShadowCaster(True)
         render.setLight(render.attachNewNode(directionalLight))
         render.setLight(render.attachNewNode(ambientLight))
-        #fog
+        # Create a black fog and apply it to the world.
         self.fog = Fog('distanceFog')
         self.fog.setColor(0, 0, 0)
         self.fog.setExpDensity(.000001)
@@ -72,12 +89,21 @@ class Begin(ShowBase):
         base.cTrav.setRespectPrevTransform(True)
         self.collHandEvent = CollisionHandlerEvent()
         self.collHandEvent.addInPattern("%fn-into-%in")
-        # Add colision sphere to player
+        # Add colision sphere to player for losing state
         cNode = CollisionNode("player")
         cNode.addSolid(CollisionSphere(0, 0, 0, 1))
         self.player_np = base.camera.attachNewNode(cNode)
         base.cTrav.addCollider(self.player_np, self.collHandEvent)
         self.accept("player-into-asteroid", self.end_game)
+        self.accept("player-into-pointball", self.score)
+        # Setup initial score
+        self.title = OnscreenText(text="Score: {0}".format(score),
+                            parent=base.a2dTopLeft, scale=.07,
+                            align=TextNode.ALeft, pos=(0.1,-0.1),
+                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+        # Add Occluder Culling - I will need to figure this out later
+        # occluder_model = self.loader.loadModel("./Models/cone_10vert.egg")
+        # render.setOccluder(occluder_model)
 
         Begin.keyMap = {
                         "forward": False, "strafe-left": False, "backward": False, "strafe-right": False, "strafe-up": False, "strafe-down": False, "roll-left": False, "roll-right": False
@@ -114,10 +140,10 @@ class Begin(ShowBase):
         self.accept('5', self.angle5)
         self.accept('6', self.angle6)
 
-        # Create the geometry
-        self.lastMouseX, self.lastMouseY = 0, 0
-        self.startTasks()
+        # Setup game tasks and create the 3d asteroids.
         self.createAsteroids()
+        self.startTasks()
+        pointball_value = int(time.time())
 
     def createAsteroids(self):
         self.accept(f"missle-into-asteroid", self.shot_asteroid)
@@ -139,8 +165,8 @@ class Begin(ShowBase):
         taskMgr.add(self.mouseTask, "Rotate player in hpr")
         taskMgr.add(Begin.spaceship_movement, "Move the Player in xyz")
         taskMgr.add(Begin.remove_old_missles, "Remove old missles")
-        taskMgr.add(Begin.remove_old_pointballs, "Remove old pointballs")
-        taskMgr.add(Begin.score, "Score")
+        taskMgr.add(Begin.pointballManager, "Pointballs Manager")
+        #taskMgr.add(Begin.score, "Score")
 
     ##### // Key Press Functions \\ #####
     def spaceship_movement(self):
@@ -148,26 +174,16 @@ class Begin(ShowBase):
         global spaceship_speed_y
         global spaceship_speed_z
         global max_player_speed
-        """
-        I think that all of this going to have to be rebuilt.
-
-        My thinking is to 
-        1. move player globaly relative to global xyz variables
-        2. grab player global pos
-        3. move player localy relative to keys pressed
-        4. grab player global pos
-        5. calculate the change of the location in global xyz
-        6. add the change in xyz to the global xyz variables
-        7. Start at 1 on next frame
-        """
-        local_x, local_y, local_z = 0, 0, 0
+        # Move the player on the global axis. This is how momentum is not interupted
         cam_pos_init = base.camera.getPos()
         base.camera.setPos(cam_pos_init[0] + spaceship_speed_x, # Spaceship X change per frame
                             cam_pos_init[1] + spaceship_speed_y, # Spaceship Y change per frame
                             cam_pos_init[2] + spaceship_speed_z) #   "       Z   "     "    "
+        # Ff a key is pressed, then we will need to do other calulations this frame.
         if Begin.keyMap["forward"] or Begin.keyMap["backward"] or Begin.keyMap["strafe-left"] or Begin.keyMap["strafe-right"] or Begin.keyMap["strafe-up"] or Begin.keyMap["strafe-down"]:
+            local_x, local_y, local_z = 0, 0, 0
             cam_pos1 = base.camera.getPos()
-            #acc_const = acceleration constant
+            # Add aribitraty movement on the local axis relative to the key pressed.
             if Begin.keyMap["forward"]:
                 local_x += 10
             if Begin.keyMap["backward"]:
@@ -182,15 +198,15 @@ class Begin(ShowBase):
                 local_z -= 5
             base.camera.setPos(base.camera, local_y, local_x, local_z)
             cam_pos2 = base.camera.getPos()
-            #Calculate the velocity change from the local change
-            # dv_xyz delta velocity xyz
+            #Calculate the global velocity change from the local change
+            # Note: dv_xyz delta velocity xyz
             dv_xyz = []
             dt = globalClock.getDt()
             dv_xyz = [(cam_pos2[i] - cam_pos1[i]) / dt for i in range(0,3)]
             spaceship_speed_x += dv_xyz[0]
             spaceship_speed_y += dv_xyz[1]
             spaceship_speed_z += dv_xyz[2]
-            
+        # Separate from the top movement. Allow for camera rotation    
         if Begin.keyMap["roll-left"]:
             camera_r = base.camera.getR()
             base.camera.setR(camera_r - 1)
@@ -208,21 +224,18 @@ class Begin(ShowBase):
         pass
 
     ##### // Tasks \\ #####
-    def score(self):
+    def score(self, collision_entry):
         global score
-        global score_list
-        if (len(score_list) > 0):
-            for points in score_list:
-                score += points
-            score_list = []
-            try:
-                self.title.clearText()
-            except:
-                pass
-            self.title = OnscreenText(text="Score: {0}".format(score),
-                                parent=base.a2dTopLeft, scale=.07,
-                                align=TextNode.ALeft, pos=(0.1,-0.1),
-                                fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+        pointball = collision_entry.getIntoNodePath().parent
+        print(pointball.children)
+        score += int(pointball.getTag("value"))
+        render.clearLight(pointball.find("**/plight"))
+        pointball.removeNode()
+        self.title.clearText()
+        self.title = OnscreenText(text="Score: {0}".format(score),
+                            parent=base.a2dTopLeft, scale=.07,
+                            align=TextNode.ALeft, pos=(0.1,-0.1),
+                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
         return Task.cont
 
     # Test the distance of all asteroids. If the asteroid is too far away turn it around.
@@ -286,15 +299,38 @@ class Begin(ShowBase):
                 missle.ttl -= dt
         return Task.cont
 
-    def remove_old_pointballs(self):
+    def pointballManager(self):
         global pointball_total
         dt = globalClock.getDt() # delta t per frame
         for pointball in pointball_total:
+            # Animate the size
+            scale_xyz = pointball.one.getScale()
+            time = pointball.ttl_max - pointball.ttl
+            dampened_cos = pointball.max_size * math.exp(0.36 * -time) * math.cos(0.5 * math.pi * time)
+            dampened_sin = pointball.max_size * math.exp(0.36 * -time) * math.sin(0.5 * math.pi * time)
+            pointball.one.setScale(dampened_cos, dampened_cos, dampened_cos)
+            pointball.two.setScale(dampened_sin, dampened_sin, dampened_sin)
+            # Move towards player if in range
+            try:
+                if pointball.center.getDistance(base.camera) < pointball.attraction_distance:
+                    cam_2_ball = pointball.center.getPos(base.camera)
+                    total = cam_2_ball[0] + cam_2_ball[1] + cam_2_ball[2]
+                    percent_xyz = [cam_2_ball[i] / total for i in range(0, 3)]
+                    pointball.center.setPos(base.camera,
+                                            cam_2_ball[0] - 2000 * percent_xyz[0],
+                                            cam_2_ball[1] - 2000 * percent_xyz[1],
+                                            cam_2_ball[2] - 2000 * percent_xyz[2])
+            except:
+                pass
+            # Remove Old PointBalls
             if pointball.ttl <= 0:
                 render.clearLight(pointball.plnp)
-                pointball.model.removeNode()
+                pointball.center.removeNode()
             else:
                 pointball.ttl -= dt
+        for index in range(0,len(pointball_total)- 1):
+            if pointball_total[index].ttl <= 0:
+                del pointball_total[index]
         return Task.cont
 
     def death_task(self):
@@ -310,6 +346,7 @@ class Begin(ShowBase):
     def shot_asteroid(self, collision_entry):
         global score_list
         global pointball_total
+        global pointball_value
 
         #Remove the missle
         missle = collision_entry.getFromNodePath()
@@ -318,7 +355,6 @@ class Begin(ShowBase):
         except:
             pass
         missle.removeNode()
-
         # Gather large asteroid info so still accesable after deleted
         # Note: na is short for "new_asteroid", has is "hit_asteroid_size"
         hit_asteroid = collision_entry.getIntoNodePath()
@@ -331,7 +367,6 @@ class Begin(ShowBase):
                 break
         # Delete before smaller asteoids are created to allow for asteroid-into-asteroid collisions
         hit_asteroid.parent.removeNode()
-        
         # If small asteroid, just delete, if not create two of smaller size
         if not(has == "small"):
             # Generate 2 asteroids at oposite poistions (shimmy) within the larger asteoid, and oposite directions
@@ -359,10 +394,15 @@ class Begin(ShowBase):
                     extra_smallasteroids.insert(0,Asteroid("small"))
                 else:
                     extra_mediumasteroids.insert(0,Asteroid("medium"))
-
         else:
             # Create the point ball
-            pointball_total.append(PointBall(hap))
+            current_time = int(time.time())
+            new_pointball_value = max(100 - (current_time - pointball_value), 20)
+            pointball = PointBall(hap, new_pointball_value)
+            pointball_total.append(pointball)
+            pointball_value = current_time
+            base.cTrav.addCollider(pointball.c_np, self.collHandEvent)
+            # Add a new asteroid to the scene to
             asteroid = Asteroid()
             asteroid_total.insert(0, asteroid)
             base.cTrav.addCollider(asteroid.c_np, self.collHandEvent)
@@ -470,12 +510,6 @@ class Begin(ShowBase):
             Frames = True
 
     def translate(self, value, leftMin, leftMax, rightMin, rightMax):
-        #print(self)
-        #print(value)
-        #print(leftMin)
-        #print(leftMax)
-        #print(rightMin)
-        #print(rightMax)
         # Scale value from input range to output range
         leftSpan = leftMax - leftMin
         rightSpan = rightMax - rightMin
@@ -484,7 +518,7 @@ class Begin(ShowBase):
 
 class Asteroid(object):
 
-    def __init__(self, size=False, step=20):
+    def __init__(self, size=False, step=36):
         types = {"large":  {"radius": 50000, "darkest_gray": 0.5, "lightest_gray": 0.8, "speed": 9000, "speed_percent": 5},
                  "medium": {"radius": 30000,  "darkest_gray": 0.6, "lightest_gray": 0.8, "speed": 180,  "speed_percent": 10},
                  "small":  {"radius": 10000,   "darkest_gray": 0.6, "lightest_gray": 0.8, "speed": 90,   "speed_percent": 20}}
@@ -700,24 +734,43 @@ class Missle(object):
         self.core.reparentTo(render)
 
 class PointBall(object):
-    def __init__(self, position):
-        self.model = loader.loadModel("./Models/sphere.egg")
-        self.ttl = 10 #Time to live in seconds
-        self.model.setPos(position)
-        self.model.setColor(colors.get("blue-transparent"))
-        self.model.setScale(5000,5000,5000)
-        self.model.setLightOff()
+    def __init__(self, position, value):
+        #Invisiible point so that both spheres have the same parent
+        self.name = "pointball"
+        self.center = NodePath(PandaNode("Pointball center"))
+        self.ttl = 15 #Time to live in seconds
+        self.ttl_max = 15
+        self.max_size = 9000
+        self.attraction_distance = 3000000000
+        self.center.setPos(position)
+        self.center.setTag("value", str(value))
+        # Create 1st sphere
+        self.one = loader.loadModel("./Models/sphere.egg")
+        self.one.setColor(colors.get("blue-transparent"))
+        self.one.setScale(self.max_size,self.max_size,self.max_size)
+        self.one.setLightOff()
+        self.one.reparentTo(self.center)
+        #Create 2nd sphere
+        self.two = loader.loadModel("./Models/sphere.egg")
+        self.two.setColor(colors.get("lightblue-transparent"))
+        self.two.setScale(self.max_size,self.max_size,self.max_size)
+        self.two.setLightOff()
+        self.two.reparentTo(self.center)
 
         #Create the light so the missle glows
         plight = PointLight('plight')
         plight.setColor(colors.get("blue"))
         plight.setAttenuation(LVector3(0, 0.00008 , 0))
         plight.setMaxDistance(300)
-        self.plnp = self.model.attachNewNode(plight) #point light node point
+        self.plnp = self.center.attachNewNode(plight) #point light node point
         render.setLight(self.plnp)
 
+        # Create Collision hitsphere
+        cNode = CollisionNode(self.name)
+        cNode.addSolid(CollisionSphere(0,0,0,self.max_size))
+        self.c_np = self.center.attach_new_node(cNode)
         #Render to scene
-        self.model.reparentTo(render)
+        self.center.reparentTo(render)
 
 
 # Note to self. I can use self. in tasks to avoid having to use global variables
