@@ -14,11 +14,17 @@ from opensimplex import OpenSimplex as opens
 import time
 from direct.gui.OnscreenText import OnscreenText
 from direct.interval.IntervalGlobal import *
+from direct.gui.DirectGui import (
+    DirectFrame,
+    DirectLabel,
+    DirectButton)
+from direct.showbase.Loader import Loader
+import webbrowser
 
 #Gameplay variables
-asteroid_spawn_distance     = 2900000 # How close the asteroids spawn and how far away they will fly to
+asteroid_spawn_distance     = 3000000 # How close the asteroids spawn and how far away they will fly to
 asteroid_min_spawn_distance = 100000
-asteroid_future_distance    = 10000000 # How far the asteroid will travel
+asteroid_future_distance    = asteroid_min_spawn_distance * 10 # How far the asteroid will travel
 asteroid_total              = []
 extra_smallasteroids        = []
 extra_mediumasteroids       = []
@@ -30,45 +36,43 @@ spaceship_speed_y           = 0
 spaceship_speed_z           = 0
 colors                      = {"orange": (.9,.6,.05,1),
                                "gray": (.1,.1,.1,1),
-                               "black": (0,0,0,1),
-                               "white": (1,1,1,1),
-                               "white-transparent": (1,1,1,0.4),
-                               "red": (1,0,0,1),
-                               "red-transparent": (1,0,0,0.4),
-                               "yellow-tinge": (1,1,0.8,1),
-                               "yellow-tinge-transparent": (1,1,0.8,0.4),
-                               "blue": (0, 0.8,1,1),
-                               "blue-transparent": (0,0.8,1,0.7),
-                               "lightblue-transparent": (0.8,1,1,0.7)}
-asteroid_test_distance      = 2900000 #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
+                                "black": (0,0,0,1),
+                                "white": (1,1,1,1),
+                                "white-transparent": (1,1,1,0.4),
+                                "red": (0.4,0,0,0.4),
+                                "red-transparent": (0.4,0,0,0.4),
+                                "yellow-tinge": (1,1,0.8,1),
+                                "yellow-tinge-transparent": (1,1,0.8,0.4),
+                                "blue": (0, 0.8,1,1),
+                                "blue-transparent": (0,0.6,0.8,0.3),
+                                "lightblue-transparent": (0.6,0.6,0.8,0.3)}
+asteroid_test_distance      = asteroid_spawn_distance * (29.0 / 30.0) #The test distance. If asteroid greater than asteroid_test_distancem then it will be moved closer
 score                       = 0  # Initialize score
-score_list                  = [0]
-FullSceeen                  = False
+fullscreen                  = False
 Frames                      = True
 test_max_min                = [0,0,0,0]
-max_player_speed            = 5000
+max_player_speed            = 9000
 pointball_value             = 0
+title_screen                = None
+is_living                   = True
+resolution                  = (800,600)
+cursor_hidden               = False
 # Windows settings
-loadPrcFileData('', 'window-title 3d Space Rocks 2020')
+loadPrcFileData('', 'window-title Space Rocks!')
+thunderstrike = Loader.loadFont(0, "./Fonts/thunderstrike.ttf")
+thunderstrike3d = Loader.loadFont(0, "./Fonts/thunderstrike3d.ttf")
+
 
 class Begin(ShowBase):
     def __init__(self):
         global pointball_value
+        global title_screen
         # Basics
         ShowBase.__init__(self)
         #Setup the window
         base.disableMouse()
-        if Frames:
-            base.setFrameRateMeter(True)
+        self.set_windowsettings()
         base.camLens.setFar(asteroid_spawn_distance * 100)
-        # Set mouse and display settings
-        self.lastMouseX, self.lastMouseY = 0, 0
-        render.setAntialias(AntialiasAttrib.MAuto)
-        wp = WindowProperties()
-        wp.setMouseMode(WindowProperties.M_relative)
-        wp.setCursorHidden(True)
-        wp.setSize(800,600)
-        self.win.requestProperties(wp)
         self.setBackgroundColor(colors.get("black"))
         # Create the directional and ambient lights, and apply them to the world.
         ambientLight = AmbientLight("ambientLight")
@@ -91,7 +95,7 @@ class Begin(ShowBase):
         self.collHandEvent.addInPattern("%fn-into-%in")
         # Add colision sphere to player for losing state
         cNode = CollisionNode("player")
-        cNode.addSolid(CollisionSphere(0, 0, 0, 1))
+        cNode.addSolid(CollisionSphere(0, 0, 0, 3))
         self.player_np = base.camera.attachNewNode(cNode)
         base.cTrav.addCollider(self.player_np, self.collHandEvent)
         self.accept("player-into-asteroid", self.end_game)
@@ -100,7 +104,8 @@ class Begin(ShowBase):
         self.title = OnscreenText(text="Score: {0}".format(score),
                             parent=base.a2dTopLeft, scale=.07,
                             align=TextNode.ALeft, pos=(0.1,-0.1),
-                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5),
+                            font=thunderstrike)
         # Add Occluder Culling - I will need to figure this out later
         # occluder_model = self.loader.loadModel("./Models/cone_10vert.egg")
         # render.setOccluder(occluder_model)
@@ -140,10 +145,46 @@ class Begin(ShowBase):
         self.accept('5', self.angle5)
         self.accept('6', self.angle6)
 
+        # Create the menu
+        self.quality_name = "Low"
+        self.quality_num = 1
+        self.frameMain = DirectFrame(
+            frameSize = (10,-10,10,-10),
+            frameColor = (0, 0, 0, 1))
+
+        self.menu_title = DirectFrame(
+            frameSize = (base.a2dLeft, base.a2dRight, 0.55, 0.8),
+            frameTexture = loader.loadTexture("./Fonts/title.png"),
+            parent = self.frameMain
+        )
+        
+        title_asteroid = Asteroid("small")
+        self.menu_asteroid = DirectFrame(
+            geom = title_asteroid.np,
+            geom_scale = (0.000008,0.000008,0.000008),
+            pos = (1.13,0,0.56),
+            frameColor = (0,0,0,1),
+            enableEdit = 1,
+            parent = self.menu_title
+        )
+        
+        title_screen = self.frameMain
+        title_screen.menu_asteroid = self.menu_asteroid
+        title_screen.start_btn = self.createButton("Start", self.start_game, 0.2)
+        title_screen.how_to_btn = self.createButton("How to Play", self.how_to_play, 0)
+        title_screen.exit_btn = self.createButton("Quit", sys.exit, -0.2)
+        title_screen.res_apply_btn = self.createButton("Apply", self.apply_res_button, -0.4, 1, (-2,2.3,-0.6,1))
+        title_screen.res_apply_btn.hide()
+        title_screen.resolution_btn = self.createButton(f"Resolution ({resolution[0]} x {resolution[1]})", self.resolution, -0.4)
+        title_screen.fullscreen_btn = self.createButton("Toggle Fullscreen", self.fullscreenToggle, -0.6)
+        title_screen.quality_btn = self.createButton(f"Qualilty ({self.quality_name})", self.quality, -0.8)
+        title_screen.qual_apply_btn = self.createButton("Apply", self.apply_res_button, -0.8, 1, (-2,2.3,-0.6,1))
+        title_screen.qual_apply_btn.hide()
+        taskMgr.add(Begin.menu, "Menu")
+
         # Setup game tasks and create the 3d asteroids.
-        self.createAsteroids()
-        self.startTasks()
-        pointball_value = int(time.time())
+        #self.createAsteroids()
+
 
     def createAsteroids(self):
         self.accept(f"missle-into-asteroid", self.shot_asteroid)
@@ -159,6 +200,120 @@ class Begin(ShowBase):
         for i in range(0, int(asteroid_max * 0.05)):
             extra_mediumasteroids.insert(0,Asteroid("medium"))
 
+    def start_game(self):
+        global pointball_value
+        # Set mouse and display settings
+        self.lastMouseX, self.lastMouseY = 0, 0
+        cursor_hidden = True
+        self.set_windowsettings()
+        self.startTasks()
+        # Hide the main Menu
+        self.frameMain.hide()
+        # Change what the escape key does
+        self.accept("escape", self.pause)
+        pointball_value = int(time.time())
+
+    def pause(self):
+        global is_living
+        global score
+        pause_pointball_value = pointball_value
+        # Show + relase the mouse
+        self.frameMain.show()
+        cursor_hidden = True
+        self.set_windowsettings()
+        taskMgr.remove("Rotate player in hpr")
+        self.acceptOnce("escape", sys.exit)
+        # Change start button text relative to living state + remove death dext if died
+        if is_living:
+            title_screen.start_btn["text"] = "Resume"
+        else:
+           aspect2d.find("**/-TextNode").removeNode()
+           title_screen.start_btn["text"] = "Retry !"
+           score = 0 
+        #print(title_screen.start_btn)
+
+    def quality(self):
+        qual_dict = {
+        # asteroid_number is chosen by 300 was found to be a good number when testing on a low spec machine. The larger ones keep the same density of asteroids as volume increases 
+            1: {"quality": "Low",    "asteroid_detail": 36, "fog_quality": 0.000001,  "asteroid_spawn_distance": 3000000, "asteroid_number": 300},
+            2: {"quality": "Medium", "asteroid_detail": 30, "fog_quality": 0.0000008, "asteroid_spawn_distance": 4000000, "asteroid_number": 711},
+            3: {"quality": "High",   "asteroid_detail": 20, "fog_quality": 0.0000006, "asteroid_spawn_distance": 5000000, "asteroid_number": 1389},
+        }
+        self.quality_num = self.quality_num + 1 if self.quality_num != 3 else 1
+        print(self.quality_num)
+        quality = qual_dict[self.quality_num]
+        self.quality_name           = quality["quality"]
+        self.asteroid_detail        = quality["asteroid_detail"]
+        self.fog_quality            = quality["fog_quality"]
+        asteroid_spawn_distance     = quality["asteroid_spawn_distance"]
+        asteroid_future_distance    = asteroid_min_spawn_distance * 10
+        asteroid_test_distance      = asteroid_spawn_distance * (29.0 / 30.0)
+        asteroid_max                = quality["asteroid_number"]
+        text = f"Quality ({self.quality_name})"
+        title_screen.quality_btn["text"] = (text, text, f" {text}!", text)
+        title_screen.qual_apply_btn.show()
+
+    def resolution(self):
+        global resolution
+        res_list = [
+            # 4:3
+            (800,600),
+            (1024,768),
+            (1920,1440),
+            (4096,3071),
+            # 5:4
+            (1280,1024),
+            # 16:9
+            (1280,720),
+            (1366,768),
+            (1600,900),
+            (1920,1080),
+            (2560,1440),
+            (3840,2160),
+            (4096,2304),
+            #16:10
+            (1440,900),
+            (1680,1050),
+            (2304,1440),
+            (4096,2560),
+            # 21:9
+            (2160,1080),
+            (3440,1440)
+        ]
+        index = res_list.index(resolution)
+        
+        resolution = res_list[index + 1] if index < len(res_list) - 1 else res_list[0]
+        if base.getSize() == resolution:
+            title_screen.res_apply_btn.hide()
+        else:
+            title_screen.res_apply_btn.show()
+        text = f"Resolution ({resolution[0]} x {resolution[1]})" 
+        title_screen.resolution_btn["text"] = (text, text, f" {text}!", text)
+
+    def apply_res_button(self):
+        title_screen.res_apply_btn.hide()
+        self.set_windowsettings()
+
+    def how_to_play(self):
+        webbrowser.open('https://github.com/13r0ck/3d-Space-Rocks-Simulator-2020')
+
+    def createButton(self, text, command, verticalPos, horisontalPos=0, frame_size=(-8,8,-0.6,1)):
+        btn = DirectButton(
+            text=(text, text, f" {text}!", text),
+            text_fg=(1,1,1,1),
+            pad=(0.7,0.3),
+            frameSize=frame_size,
+            frameTexture="./Images/Button_Frame.png",
+            relief=1,
+            text_font=thunderstrike,
+            text_scale=0.9,
+            scale = 0.1,
+            command = command,
+            pos = (horisontalPos,0, verticalPos)
+        )
+        btn.reparentTo(self.frameMain)
+        return btn
+
     def startTasks(self):
         #The tasks below are the functions run every frame so the game will work
         taskMgr.add(Begin.test_distance, "Test Distance")
@@ -166,7 +321,12 @@ class Begin(ShowBase):
         taskMgr.add(Begin.spaceship_movement, "Move the Player in xyz")
         taskMgr.add(Begin.remove_old_missles, "Remove old missles")
         taskMgr.add(Begin.pointballManager, "Pointballs Manager")
-        #taskMgr.add(Begin.score, "Score")
+        
+
+    def menu(self):
+        h,p,r = title_screen.menu_asteroid["geom_hpr"]
+        title_screen.menu_asteroid["geom_hpr"] = LVecBase3f(h + 2.5, 0,0)
+        return Task.cont
 
     ##### // Key Press Functions \\ #####
     def spaceship_movement(self):
@@ -187,15 +347,15 @@ class Begin(ShowBase):
             if Begin.keyMap["forward"]:
                 local_x += 10
             if Begin.keyMap["backward"]:
-                local_x -= 5
+                local_x -= 10
             if Begin.keyMap["strafe-right"]:
-                local_y += 5
+                local_y += 10
             if Begin.keyMap["strafe-left"]:
-                local_y -= 5
+                local_y -= 10
             if Begin.keyMap["strafe-up"]:
-                local_z += 5
+                local_z += 10
             if Begin.keyMap["strafe-down"]:
-                local_z -= 5
+                local_z -= 10
             base.camera.setPos(base.camera, local_y, local_x, local_z)
             cam_pos2 = base.camera.getPos()
             #Calculate the global velocity change from the local change
@@ -203,9 +363,22 @@ class Begin(ShowBase):
             dv_xyz = []
             dt = globalClock.getDt()
             dv_xyz = [(cam_pos2[i] - cam_pos1[i]) / dt for i in range(0,3)]
-            spaceship_speed_x += dv_xyz[0]
-            spaceship_speed_y += dv_xyz[1]
-            spaceship_speed_z += dv_xyz[2]
+            # Calcualte the magnitude to limit player speed
+            mag = math.sqrt((spaceship_speed_x)**2 + (spaceship_speed_y)**2 + (spaceship_speed_z)**2)
+            if mag < max_player_speed:
+                spaceship_speed_x += dv_xyz[0]
+                spaceship_speed_y += dv_xyz[1]
+                spaceship_speed_z += dv_xyz[2]
+            else:
+                possible_x, possible_y, possible_z = spaceship_speed_x, spaceship_speed_y, spaceship_speed_z
+                possible_x += dv_xyz[0]
+                possible_y += dv_xyz[1]
+                possible_z += dv_xyz[2]
+                possible_mag = math.sqrt((possible_x)**2 + (possible_y)**2 + (possible_z)**2) 
+                if possible_mag < mag:
+                    spaceship_speed_x += dv_xyz[0]
+                    spaceship_speed_y += dv_xyz[1]
+                    spaceship_speed_z += dv_xyz[2]
         # Separate from the top movement. Allow for camera rotation    
         if Begin.keyMap["roll-left"]:
             camera_r = base.camera.getR()
@@ -226,8 +399,8 @@ class Begin(ShowBase):
     ##### // Tasks \\ #####
     def score(self, collision_entry):
         global score
+        global thunderstrike
         pointball = collision_entry.getIntoNodePath().parent
-        print(pointball.children)
         score += int(pointball.getTag("value"))
         render.clearLight(pointball.find("**/plight"))
         pointball.removeNode()
@@ -235,7 +408,8 @@ class Begin(ShowBase):
         self.title = OnscreenText(text="Score: {0}".format(score),
                             parent=base.a2dTopLeft, scale=.07,
                             align=TextNode.ALeft, pos=(0.1,-0.1),
-                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+                            fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5),
+                            font=thunderstrike)
         return Task.cont
 
     # Test the distance of all asteroids. If the asteroid is too far away turn it around.
@@ -317,9 +491,9 @@ class Begin(ShowBase):
                     total = cam_2_ball[0] + cam_2_ball[1] + cam_2_ball[2]
                     percent_xyz = [cam_2_ball[i] / total for i in range(0, 3)]
                     pointball.center.setPos(base.camera,
-                                            cam_2_ball[0] - 2000 * percent_xyz[0],
-                                            cam_2_ball[1] - 2000 * percent_xyz[1],
-                                            cam_2_ball[2] - 2000 * percent_xyz[2])
+                                            cam_2_ball[0] - 20000 * percent_xyz[0],
+                                            cam_2_ball[1] - 20000 * percent_xyz[1],
+                                            cam_2_ball[2] - 20000 * percent_xyz[2])
             except:
                 pass
             # Remove Old PointBalls
@@ -328,9 +502,9 @@ class Begin(ShowBase):
                 pointball.center.removeNode()
             else:
                 pointball.ttl -= dt
-        for index in range(0,len(pointball_total)- 1):
-            if pointball_total[index].ttl <= 0:
-                del pointball_total[index]
+        #for index in range(0,len(pointball_total)- 1):
+        #    if pointball_total[index].ttl <= 0:
+        #        del pointball_total[index]
         return Task.cont
 
     def death_task(self):
@@ -409,11 +583,13 @@ class Begin(ShowBase):
             asteroid.add_togame(asteroid.get_sphere_points(asteroid_spawn_distance, base.camera))
 
     def end_game(self, collision_entry):
+        global is_living
+        is_living = False
         asteroid = collision_entry.getIntoNodePath()
         # Make the world red
-        self.fog.setColor(1,0,0)
+        self.fog.setColor(0.5,0,0)
         self.fog.setExpDensity(.000001)
-        self.setBackgroundColor(1,0,0,1)
+        self.setBackgroundColor(0.5,0,0,1)
         # Set random spin upon death. This is called in the death_task 
         base.camera.setTag("h_speed", str(random.randrange(0,1)))
         base.camera.setTag("p_speed", str(random.randrange(0,1)))
@@ -428,10 +604,13 @@ class Begin(ShowBase):
         base.camera.lookAt(asteroid)
         # Start the death spiral + death text
         taskMgr.add(Begin.death_task, "Death Spin")
-        self.title = OnscreenText(text="Your Spaceship has Crashed",
+        self.death_text = OnscreenText(text="Your Spaceship has Crashed !",
+                            font=thunderstrike,
                             parent=base.aspect2d, scale=0.1,
                             align=TextNode.ACenter, pos=(0,0),
                             fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.5))
+        self.death_text.reparentTo(aspect2d)
+        
 
     ##### // Developement Functions \\ #####
     def stop_moving(self):
@@ -474,31 +653,32 @@ class Begin(ShowBase):
         self.keyMap[key] = value
 
     def fullscreenToggle(self):
-        global FullSceeen
+        global fullscreen
         global Frames
-        wp = WindowProperties()
-        if (not(FullSceeen)):
-            wp.setFullscreen(True)
-            wp.setCursorHidden(True)
-            wp.setMouseMode(WindowProperties.M_relative)
-            #self.base.win.getProperties().getXSize()
-            #self.base.win.getProperties().getYSize
-            wp.setSize(3840,2160)
-            base.openMainWindow()
-            base.win.requestProperties(wp)
-            base.graphicsEngine.openWindows()
-            FullSceeen = True
+        if (not(fullscreen)):
+            fullscreen = True
+            self.set_windowsettings()
         else:
-            wp.setFullscreen(False)
-            wp.setCursorHidden(True)
-            wp.setMouseMode(WindowProperties.M_relative)
-            wp.setSize(800,600)
-            base.openMainWindow()
-            base.win.requestProperties(wp)
-            base.graphicsEngine.openWindows()
-            FullSceeen = False
-        #Resizing clears frames. Reset that
+            fullscreen = False
+            self.set_windowsettings()
+
+    def set_windowsettings(self, reset_window=False):
+        global fullscreen
+        global cursor_hidden
+        wp = WindowProperties()
+        wp.setCursorHidden(cursor_hidden)
         base.setFrameRateMeter(Frames)
+        wp.setFullscreen(fullscreen)
+        wp.setSize(resolution)
+        self.win.requestProperties(wp)
+        if cursor_hidden:
+            wp.setMouseMode(WindowProperties.M_relative)
+        else:
+            wp.setMouseMode(0)
+        if reset_window:
+            base.openMainWindow()
+            base.graphicsEngine.openWindows()
+        render.setAntialias(AntialiasAttrib.MAuto)
 
     def framesToggle(self):
         global Frames
@@ -686,7 +866,7 @@ class Asteroid(object):
 class Location(object): # Create child of asteroid to find the future position the asteroid will fly to
     def __init__(self, asteroid_parent, distance=asteroid_future_distance):
         self.obj = loader.loadModel("./Models/sphere.egg")
-        self.obj.setY(asteroid_parent, distance)
+        self.obj.setPos(asteroid_parent, spaceship_speed_x, spaceship_speed_y + distance, spaceship_speed_z)
 
 class Missle(object):
     def __init__(self):
@@ -721,15 +901,30 @@ class Missle(object):
         self.c_np = self.core.attachNewNode(cNode)
 
         # Create and run the missle animation
-        location = Location(self.core).obj.getPos()
+        
+        end_location = Location(self.core).obj.getPos()
+        start_location = base.camera.getPos()
+        start_location[0] += spaceship_speed_x
+        start_location[1] += spaceship_speed_y
+        start_location[2] += spaceship_speed_z
+        """
+        #Calcualte future distance
+        cam_hpr = base.camera.getHpr()
+        phi, theta = cam_hpr[0], Begin.translate(0, cam_hpr[1], -180,180,0,2*math.pi)
+        phi *= math.pi / 180
+        # component vecotrs
+        x = asteroid_future_distance * math.cos(phi) * math.cos(theta)
+        y = asteroid_future_distance * math.sin(phi) * math.cos(theta)
+        z = asteroid_future_distance *  math.sin(theta)
+        """
 
         self.asteroid_lerp = LerpPosInterval(self.core, # Object being manipulated. The missle in this case.
                                             2000, # How long it will take the missle to go from point a to b in seconds
-                                            location, # future location at end of lerp
-                                            base.camera.getPos(), # The start position of the missle
+                                            end_location, # future location at end of lerp
+                                            start_location, # The start position of the missle
                                             fluid=1) # Allow for colisions during the lerp
         self.asteroid_lerp.start()
-        del location
+        del end_location
 
         self.core.reparentTo(render)
 
@@ -741,7 +936,7 @@ class PointBall(object):
         self.ttl = 15 #Time to live in seconds
         self.ttl_max = 15
         self.max_size = 9000
-        self.attraction_distance = 3000000000
+        self.attraction_distance = 900000
         self.center.setPos(position)
         self.center.setTag("value", str(value))
         # Create 1st sphere
@@ -760,14 +955,14 @@ class PointBall(object):
         #Create the light so the missle glows
         plight = PointLight('plight')
         plight.setColor(colors.get("blue"))
-        plight.setAttenuation(LVector3(0, 0.00008 , 0))
-        plight.setMaxDistance(300)
+        plight.setAttenuation(LVector3(0, 0.000006 , 0))
+        plight.setMaxDistance(100)
         self.plnp = self.center.attachNewNode(plight) #point light node point
         render.setLight(self.plnp)
 
         # Create Collision hitsphere
         cNode = CollisionNode(self.name)
-        cNode.addSolid(CollisionSphere(0,0,0,self.max_size))
+        cNode.addSolid(CollisionSphere(0,0,0,self.max_size * 20))
         self.c_np = self.center.attach_new_node(cNode)
         #Render to scene
         self.center.reparentTo(render)

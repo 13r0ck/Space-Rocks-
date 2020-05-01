@@ -1,3 +1,8 @@
+All files under the directories "Fonts" are copyright Daniel Zadorozny and used by this project for non-comercial uses.
+
+Any other file of this project is available under the MIT license as follow:
+
+
 MIT License
 
 Copyright (c) 2020 Brock Szuszczewicz
