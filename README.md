@@ -23,7 +23,7 @@ The player can move freely with six degrees of freedom. All movement is relative
 It wouldn't bw an Asteroids clone if you couldn't shoot asteroids! Asteroids can be shot and will break from 1 Large -> 2 Medium -> 4 Small asteroids, exacxtly like the game Asteroids. Breaking a small asteroid create a "pointball" that is atracted to the player once the player gets close enough. The value of each pointball is realtive to the amount of time since the last small asteroid was shot. With a max value of 100 and a min of 20.
 ![](https://github.com/13r0ck/Space-Rocks-/blob/readme_update/Images/gif/missles.GIF?raw=true)
 #### Space Death
-It is possible to die is Space Rocks! Just like real space, you will die alone. Unlike real space the universe turns red when you die though.
+It is possible to die is Space Rocks! Just like real space, you will die alone. Unlike real space the universe turns red when you die.
 
 ![](https://github.com/13r0ck/Space-Rocks-/blob/readme_update/Images/gif/death_state.GIF?raw=true)
 
