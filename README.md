@@ -8,7 +8,7 @@ While by no means a fun game, Space Rocks! did accomplish its goal of teaching m
 
 ### Features of the Game
 #### GUI
-This project was my first foray into progarrming a GUI. The GUI uses Panda3d's proprietaty GUI API.
+This project was my first foray into programing a GUI. The GUI uses the Panda3d API.
 ![](https://github.com/13r0ck/Space-Rocks-/blob/readme_update/Images/gif/ui_demo.GIF?raw=true)
 #### Procedural Asteroid Generation
 All asteroids are uniquely generated in 3d space via opensimplex noise with epoch time of each asteroid generation as the seed. Panda3d does not make 3d model creation/manipulation as simple as most modern game engines. Each vertex must have a unique coordinate in 3d space, and then the list of all verteces must be parsed manually and told (in the correct order) what other related verteces make each individual polygon of the asteroid. The texture of all asteroids is also procedurally generated, with deeper pits in the model being a darker gray.
